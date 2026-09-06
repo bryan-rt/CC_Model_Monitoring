@@ -113,12 +113,19 @@ generate_dates <- function(n, quarter_start) {
 }
 
 # --- Main generator ---
+# quarters: named list. Each element is a named numeric vector of per-segment
+# target PSI values (names "0"-"4"). Each segment solves its own alpha.
+# Shuffling applications between segments post-hoc does NOT produce distinct
+# per-segment PSIs — PSI is computed on percentages, so moving rows between
+# segments leaves each segment's bin distribution unchanged. The only real
+# effect comes from re-binning through different break vectors, which is
+# uncontrollable. Per-segment alpha is the correct mechanism.
 generate_cohort <- function(
   quarters = list(
-    "2025-10-01" = 0.00,
-    "2026-01-01" = 0.06,
-    "2026-04-01" = 0.13,
-    "2026-07-01" = 0.30
+    "2025-10-01" = c("0" = 0.00, "1" = 0.00, "2" = 0.00, "3" = 0.00, "4" = 0.00),
+    "2026-01-01" = c("0" = 0.08, "1" = 0.03, "2" = 0.05, "3" = 0.02, "4" = 0.04),
+    "2026-04-01" = c("0" = 0.18, "1" = 0.05, "2" = 0.12, "3" = 0.03, "4" = 0.08),
+    "2026-07-01" = c("0" = 0.30, "1" = 0.09, "2" = 0.25, "3" = 0.04, "4" = 0.15)
   ),
   seed = 42L
 ) {
@@ -134,19 +141,23 @@ generate_cohort <- function(
 
   for (q_idx in seq_along(quarters)) {
     quarter_start <- names(quarters)[q_idx]
-    target_psi <- quarters[[q_idx]]
-
-    alpha <- solve_alpha(target_psi)
-    weights <- tilt_weights(alpha)
+    target_psi_vec <- quarters[[q_idx]]
 
     # --- Core rows (survive all Rmd filters) ---
     core_list <- vector("list", length(segment_volumes))
     bin_stats <- list()
+    alphas <- numeric(length(segment_volumes))
+    names(alphas) <- names(segment_volumes)
 
     for (s_idx in seq_along(segment_volumes)) {
       seg_name <- names(segment_volumes)[s_idx]
       N <- segment_volumes[s_idx]
       brks <- segment_breaks[[seg_name]]
+
+      seg_target <- target_psi_vec[seg_name]
+      seg_alpha <- solve_alpha(seg_target)
+      alphas[seg_name] <- seg_alpha
+      weights <- tilt_weights(seg_alpha)
       bin_counts <- deterministic_allocate(N, weights)
 
       stopifnot(min(bin_counts) >= 50)
@@ -320,12 +331,12 @@ generate_cohort <- function(
 
     all_bin_counts <- unlist(bin_stats, use.names = FALSE)
     meta[[quarter_start]] <- list(
-      target_psi       = target_psi,
-      alpha            = alpha,
-      theoretical_psi  = psi_from_alpha(alpha),
+      target_psi       = target_psi_vec,
+      alphas           = alphas,
       n_apps           = n_total,
       n_scorecard      = n_sc,
       n_core           = n_core,
+      bin_stats        = bin_stats,
       min_bin          = min(all_bin_counts),
       max_bin          = max(all_bin_counts)
     )
@@ -344,8 +355,11 @@ generate_cohort <- function(
   message("Generated ", nrow(apps), " apps rows, ", nrow(scorecard), " scorecard rows")
   for (qs in names(meta)) {
     m <- meta[[qs]]
-    message(sprintf("  %s: target_psi=%.2f alpha=%.4f bins=[%d, %d] apps=%d scorecard=%d",
-                    qs, m$target_psi, m$alpha, m$min_bin, m$max_bin, m$n_apps, m$n_scorecard))
+    tgt_str <- paste(sprintf("%s=%.2f", names(m$target_psi), m$target_psi), collapse = " ")
+    alpha_str <- paste(sprintf("%s=%.3f", names(m$alphas), m$alphas), collapse = " ")
+    message(sprintf("  %s: bins=[%d,%d] apps=%d", qs, m$min_bin, m$max_bin, m$n_apps))
+    message(sprintf("    targets: %s", tgt_str))
+    message(sprintf("    alphas:  %s", alpha_str))
   }
 
   list(apps = apps, scorecard = scorecard, meta = meta)

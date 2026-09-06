@@ -4,14 +4,14 @@ Quarterly monitoring pipeline for a custom credit card application scorecard.
 Rebuilds production pipeline (DB2/Databricks) from OCR screenshots, rewired to
 Supabase (Postgres) with generic tables.
 
-Primary orchestrator: `orchestration_2.Rmd` (~2,625 lines, ~28 chunks).
-Validated frontier: line 400 (`# QC: Validated`) — VALIDATED: has run
+Primary orchestrator: `orchestration_2.Rmd` (~2,627 lines, ~28 chunks).
+Validated frontier: line 453 (`# QC: Validated`) — VALIDATED: has run
 against live Supabase (D5). psi_df: 30,500 rows (generated cohort), segments
-0-4. PSI chunk runs clean through :397.
-  (anchor: :400 = `# QC: Validated` marker)
-  (anchor: :237 = `# QC: Completed` marker)
+0-4. PSI + CSI stub run clean through :450.
+  (anchor: :453 = `# QC: Validated` marker)
+  (anchor: :399 = `# QC: Completed` marker)
 
-cohort_date (orchestration_2.Rmd:65-68): overridable parameter, defaults to
+cohort_date (orchestration_2.Rmd:66-69): overridable parameter, defaults to
 current quarter. Set `cohort_date <- as.Date("YYYY-MM-DD")` before running
 the setup chunk to select a different quarter.
 
@@ -22,12 +22,11 @@ Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`,
 `build-psi-calculation`, `sample-data-generator`.
 Next sequence: round-trip test -> fix-orchestration-rmd.
 
-CSI (orchestration_2.Rmd:406-482, connection stub at :410-412) is out of scope
-for this loop (D13). It is a third data source; D13 stub replaces original
-connection block. Gets its own table and iteration once the validated marker
-reaches line 406.
-  (anchor: :406 = CSI chunk opening fence `\`\`\`{r}` preceding the D13 stub)
-  (anchor: :410-412 = D13 stub comment block)
+CSI (orchestration_2.Rmd:401-450, connection stub at :409-411) is now inside
+the validated frontier. It is a third data source; D13 stub replaces original
+connection block. Gets its own table and iteration.
+  (anchor: :405 = CSI chunk opening fence `\`\`\`{r}` preceding the D13 stub)
+  (anchor: :409-411 = D13 stub comment block)
 
 ## Pull function contracts
 
@@ -35,7 +34,7 @@ reaches line 406.
 |---|---|---|
 | `get_apps_data(performance_window, write)` | `R/pull_apps.R` | data.frame: application-level, one row per app_num. 14 columns: app_num, user_ref_num, dt_entered, client_product_cd, strategy_version, assigned_credit_lim, decision, applied, org_paper_type, lao_credit_lmt, fico_score, bureau_used, acq, prim_score (NUMERIC, D8). Dropped: applid, logic, custom_score/_2/_3 (D11), copied_from (D12). Writes `data/apps/apps_YYYYMM.txt.gz` if `write=T`. |
 | `get_cc_scorecard_data(performance_window, write)` | `R/function_cc_scorecard_data.R` | data.frame: one row per user_ref_num (D9). Columns: sq_num, user_ref_num, score, segment, actduty, trans_date_ct, proc_date_ct, primemdt (TEXT, D10). Writes `data/scorecard/scorecard_YYYYMM.txt.gz` if `write=T`. |
-| `generate_cohort(quarters, seed)` | `R/generate_cohort.R` | list: `$apps` (data.frame, ~141k rows), `$scorecard` (data.frame, ~137k rows), `$meta` (per-quarter stats). Alpha solved from target_psi via bisection (D16). Bin counts deterministic. |
+| `generate_cohort(quarters, seed)` | `R/generate_cohort.R` | list: `$apps` (data.frame, ~141k rows), `$scorecard` (data.frame, ~137k rows), `$meta` (per-quarter stats). Per-segment alpha solved from target_psi via bisection (D16). Bin counts deterministic. |
 
 ## Supabase tables
 

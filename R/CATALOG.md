@@ -1,9 +1,9 @@
 # R/ Catalog
 
 Sourced R scripts. `pull_apps.R`, `function_cc_scorecard_data.R`, and
-`build_dev_population.R` are called before the validated frontier (line 400;
+`build_dev_population.R` are called before the validated frontier (line 453;
 anchor: `# QC: Validated`). The remaining 8 scripts are commented out at
-`orchestration_2.Rmd:77` (PENDING TRANSCRIPTION marker).
+`orchestration_2.Rmd:78` (PENDING TRANSCRIPTION marker).
 
 | File | Status | Purpose | Key functions | Read by |
 |---|---|---|---|---|
