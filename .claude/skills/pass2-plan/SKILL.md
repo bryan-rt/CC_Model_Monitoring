@@ -78,12 +78,21 @@ Assumptions I could not ground, and what would settle each.
 - [ ] `git diff --stat` in the Pass 3 summary
 ```
 
+## Then commit and push
+
+```
+git add .claude/passes/$ARGUMENTS/2-plan.md
+git commit -m "Pass 2 plan: $ARGUMENTS"
+git push
+```
+
 ## Then stop
 
 Print the plan summary and this line verbatim:
 
-> Pass 2 complete. Spec at `.claude/passes/$ARGUMENTS/2-plan.md`. Review, then run
-> `/pass3-execute $ARGUMENTS` when you approve.
+> Pass 2 complete. Spec at `.claude/passes/$ARGUMENTS/2-plan.md`.
+> Committed and pushed to `main`.
+> Review, then run `/pass3-execute $ARGUMENTS` when you approve.
 
 Do not implement. Do not continue in this turn. If the Unresolved section is non-empty, say
 so explicitly — the user may want to answer those before approving.

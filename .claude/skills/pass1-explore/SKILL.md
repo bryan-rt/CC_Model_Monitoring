@@ -108,9 +108,17 @@ split costs a little ceremony, an oversized cycle costs a rollback.
 
 ### If SINGLE
 
+Commit and push:
+```
+git add .claude/passes/$ARGUMENTS/1-explore.md
+git commit -m "Pass 1 explore: $ARGUMENTS"
+git push
+```
+
 Stop with:
 
 > Pass 1 complete. Findings at `.claude/passes/$ARGUMENTS/1-explore.md`.
+> Committed and pushed to `main`.
 > Verdict: SINGLE. Review, then run `/pass2-plan $ARGUMENTS` when you approve.
 
 ### If CHECKPOINTED
@@ -138,10 +146,18 @@ the repo in a working state — the Rmd must still knit to the current validated
 end of every checkpoint. A checkpoint that only makes sense once a later one lands is drawn
 wrong; merge them or re-cut the boundary.
 
+Commit and push:
+```
+git add .claude/passes/$ARGUMENTS/1-explore.md .claude/passes/$ARGUMENTS/0-checkpoints.md
+git commit -m "Pass 1 explore (checkpointed): $ARGUMENTS"
+git push
+```
+
 Stop with:
 
 > Pass 1 complete. Findings at `.claude/passes/$ARGUMENTS/1-explore.md`.
 > Verdict: CHECKPOINTED — <n> checkpoints at `.claude/passes/$ARGUMENTS/0-checkpoints.md`.
+> Committed and pushed to `main`.
 > Review both, then run `/pass1-explore $ARGUMENTS-cp1` when you approve.
 
 Do not begin planning. Do not continue in this turn. Wait for the user.

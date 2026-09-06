@@ -20,6 +20,14 @@ If missing, stop and tell the user to run `/pass2-plan $ARGUMENTS` first.
 - Branch: !`git branch --show-current`
 - Clean tree?: !`git status --short`
 
+## Branch
+
+Create a feature branch before making any changes:
+```
+git checkout -b pass3/$ARGUMENTS
+```
+All code changes are made on this branch.
+
 ## Rules
 
 1. **Implement only what the spec says.** Scope creep here is invisible to the user, who
@@ -68,10 +76,22 @@ Comments, docs, tables updated to match.
 <paste>
 ```
 
+## Then commit and push
+
+Commit all changes (code + `3-execute.md` + catalog/doc updates) to the feature branch
+and push for review:
+
+```
+git add <changed files>
+git commit -m "Pass 3 execute: $ARGUMENTS"
+git push -u origin pass3/$ARGUMENTS
+```
+
 ## Then stop
 
 Print the summary, paste `git diff --stat`, and this line verbatim:
 
-> Pass 3 complete. Review the diff before I commit.
+> Pass 3 complete. Changes on branch `pass3/$ARGUMENTS`, committed and pushed.
+> Review the diff, then approve to merge to main.
 
-Do not commit until the user approves. Do not start the next task.
+Do not merge to main until the user approves. Do not start the next task.
