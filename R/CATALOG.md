@@ -9,7 +9,8 @@ anchor: `# QC: Validated`). The remaining 8 scripts are commented out at
 |---|---|---|---|---|
 | `db.R` | FLATTENED | Shared `db_connect()` helper | `db_connect()` | Sourced by `pull_apps.R`, `function_cc_scorecard_data.R`, `setup_supabase.R` |
 | `setup_supabase.R` | CREATED | Idempotent table setup (DROP + CREATE + seed or generated) | `setup_supabase(mode)` | Manual setup |
-| `generate_cohort.R` | CREATED | Parameterized cohort generator (4 quarters, drift via tilt weights, D6/D16) | `generate_cohort(quarters, seed)` | `R/setup_supabase.R` (mode="generated") |
+| `generate_cohort.R` | CREATED | Parameterized cohort generator (4 quarters, drift via tilt weights, D6/D16/D17). Generalized solver for categorical features. Features in Phase 2 with independent RNG. | `generate_cohort(quarters, feature_targets, seed)` | `R/setup_supabase.R` (mode="generated") |
+| `pull_features.R` | CREATED | Pull feature data (7 cols from `features` table, D17) | `get_features_data()` | CSI computation (build-csi-calculation) |
 | `pull_apps.R` | FLATTENED | Pull application data (14 cols from flat `applications` table) | `get_apps_data()` | `orchestration_2.Rmd:132` (anchor: `get_apps_data` call in cache-miss branch) |
 | `function_cc_scorecard_data.R` | FLATTENED | Pull scorecard data (8 cols from flat `scorecard` table) | `get_cc_scorecard_data()` | `orchestration_2.Rmd:114` (anchor: `get_cc_scorecard_data` call in cache-miss branch) |
 | `build_dev_population.R` | CREATED | Generate development population reference (120 rows, frozen vigintile bins, D15) | `build_dev_population(output_path)` | `orchestration_2.Rmd:266` (anchor: `source` + `build_dev_population` call in PSI chunk) |

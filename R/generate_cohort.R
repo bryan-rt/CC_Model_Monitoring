@@ -1,12 +1,14 @@
 # generate_cohort.R
 #
-# Parameterized cohort generator for PSI demonstration (D6, D16).
-# Produces four quarters of applications + scorecard data with controlled
-# drift via bin-weight tilting. Alpha is solved from target_psi via bisection.
-# Bin counts are deterministic (round + remainder); scores are random within bins.
+# Parameterized cohort generator for PSI/CSI demonstration (D6, D16, D17).
+# Produces four quarters of applications + scorecard + features data with
+# controlled drift via bin-weight tilting. Alpha is solved from target PSI/CSI
+# via bisection. Bin counts are deterministic (round + remainder); scores and
+# feature values are random within bins.
 #
 # Coupling: prim_score (applications) and segment (scorecard) are generated
 # from the same draw, then split across two tables joined on user_ref_num.
+# Features are generated in a second phase with an independent RNG stream.
 #
 # segment_breaks duplicated from orchestration_2.Rmd:181-194 and
 # R/build_dev_population.R:18-31. Third copy — breaks are frozen (D15).
@@ -17,6 +19,19 @@
 # This is a property of the synthetic data, not a defect. In production the
 # All Segments breaks ARE the pooled vigintiles so the residual is zero by
 # construction. See D16.
+#
+# Solver generalization (D17): psi_from_alpha, solve_alpha, and tilt_weights
+# accept an optional dev_weights vector for non-uniform dev distributions
+# (categorical features). When dev_weights is NULL (continuous features),
+# the uniform case 1/n_bins is used, recovering the original formula exactly.
+# For uniform q, sum(t_i) = 0, so sum(q_i * (1 + alpha*t_i)) = 1 and
+# w_i = (1 + alpha*t_i)/n. For non-uniform q, the normalization
+# sum(q_i * (1 + alpha*t_i)) != 1 in general.
+#
+# Categorical tilt direction (D17): tilt_dir = -1 reverses which end of the
+# level list is boosted. For feature_4 and feature_5 this moves mass from the
+# dominant level toward the minority level, modeling channel-mix drift away
+# from the dominant source.
 
 # --- segment_breaks (frozen, D15) ---
 segment_breaks <- list(
@@ -38,23 +53,51 @@ segment_breaks <- list(
 segment_volumes <- c("0" = 5500L, "1" = 8000L, "2" = 6000L,
                      "3" = 5500L, "4" = 5500L)
 
-# --- Theoretical PSI for linear tilt against flat dev ---
-psi_from_alpha <- function(alpha, n_bins = 20L) {
+# --- Feature definitions (D17) ---
+# type: "continuous" (quantile bins, uniform dev) or "categorical" (level set,
+#   non-uniform dev). tilt_dir: +1 boosts first element, -1 boosts last.
+#   Categorical features use tilt_dir = -1 so mass moves toward the minority
+#   level (recognizable channel-mix drift). See D17.
+feature_defs <- list(
+  feature_1 = list(type = "continuous", n_bins = 10L,
+                   range = c(0, 1000), tilt_dir = 1L),
+  feature_2 = list(type = "continuous", n_bins = 8L,
+                   range = c(0, 500),  tilt_dir = 1L),
+  feature_3 = list(type = "continuous", n_bins = 5L,
+                   range = c(0, 100),  tilt_dir = 1L),
+  feature_4 = list(type = "categorical",
+                   levels = c("A", "B", "C", "D"),
+                   dev_weights = c(0.45, 0.30, 0.15, 0.10), tilt_dir = -1L),
+  feature_5 = list(type = "categorical",
+                   levels = c("X", "Y", "Z"),
+                   dev_weights = c(0.60, 0.30, 0.10), tilt_dir = -1L)
+)
+
+# --- Theoretical PSI/CSI for linear tilt ---
+# Generalized: dev_weights = NULL uses uniform 1/n_bins; otherwise uses the
+# supplied vector. alpha can be negative (tilt_dir = -1 applied by caller).
+psi_from_alpha <- function(alpha, n_bins = 20L, dev_weights = NULL) {
   if (alpha == 0) return(0)
-  i <- seq_len(n_bins)
-  w <- (1 + alpha * (n_bins + 1 - 2 * i) / (n_bins - 1)) / n_bins
-  p_dev <- 1 / n_bins
-  sum((w - p_dev) * log(w / p_dev))
+  q <- if (is.null(dev_weights)) rep(1 / n_bins, n_bins) else dev_weights
+  n <- length(q)
+  i <- seq_len(n)
+  t_i <- (n + 1 - 2 * i) / (n - 1)
+  raw <- q * (1 + alpha * t_i)
+  w <- raw / sum(raw)
+  sum((w - q) * log(w / q))
 }
 
-# --- Bisect for alpha given target PSI ---
-solve_alpha <- function(target_psi, n_bins = 20L, tol = 1e-6) {
+# --- Bisect for alpha given target PSI/CSI ---
+# Returns positive alpha. tilt_dir controls evaluation direction: the solver
+# finds alpha >= 0 such that psi_from_alpha(alpha * tilt_dir, ...) == target.
+solve_alpha <- function(target_psi, n_bins = 20L, dev_weights = NULL,
+                        tilt_dir = 1L, tol = 1e-6) {
   if (target_psi == 0) return(0)
   lo <- 0
   hi <- 0.99
   for (iter in seq_len(100)) {
     mid <- (lo + hi) / 2
-    psi_mid <- psi_from_alpha(mid, n_bins)
+    psi_mid <- psi_from_alpha(mid * tilt_dir, n_bins, dev_weights)
     if (abs(psi_mid - target_psi) < tol) return(mid)
     if (psi_mid < target_psi) lo <- mid else hi <- mid
   }
@@ -62,9 +105,14 @@ solve_alpha <- function(target_psi, n_bins = 20L, tol = 1e-6) {
 }
 
 # --- Linear tilt weight vector ---
-tilt_weights <- function(alpha, n_bins = 20L) {
-  i <- seq_len(n_bins)
-  (1 + alpha * (n_bins + 1 - 2 * i) / (n_bins - 1)) / n_bins
+# Generalized: dev_weights = NULL uses uniform 1/n_bins. alpha can be negative.
+tilt_weights <- function(alpha, n_bins = 20L, dev_weights = NULL) {
+  q <- if (is.null(dev_weights)) rep(1 / n_bins, n_bins) else dev_weights
+  n <- length(q)
+  i <- seq_len(n)
+  t_i <- (n + 1 - 2 * i) / (n - 1)
+  raw <- q * (1 + alpha * t_i)
+  raw / sum(raw)
 }
 
 # --- Deterministic allocation: round + remainder ---
@@ -95,6 +143,26 @@ scores_in_bin <- function(n, breaks, bin_index) {
   sample(lo:hi, n, replace = TRUE)
 }
 
+# --- Generate feature values from bin/level counts ---
+# Continuous: draws runif within evenly-spaced bins on fdef$range.
+# Categorical: assigns level labels by count.
+# Returns shuffled vector (avoids bin-order artifacts).
+generate_feature_values <- function(fdef, counts) {
+  if (fdef$type == "continuous") {
+    breaks <- seq(fdef$range[1], fdef$range[2], length.out = fdef$n_bins + 1L)
+    vals <- numeric(sum(counts))
+    pos <- 1L
+    for (j in seq_along(counts)) {
+      if (counts[j] == 0L) next
+      vals[pos:(pos + counts[j] - 1L)] <- runif(counts[j], breaks[j], breaks[j + 1])
+      pos <- pos + counts[j]
+    }
+  } else {
+    vals <- rep(fdef$levels, times = counts)
+  }
+  vals[sample(length(vals))]
+}
+
 # --- Generate dates spread across 3 months of a quarter ---
 generate_dates <- function(n, quarter_start) {
   all_months <- seq(as.Date(quarter_start), by = "month", length.out = 4)
@@ -120,6 +188,11 @@ generate_dates <- function(n, quarter_start) {
 # segments leaves each segment's bin distribution unchanged. The only real
 # effect comes from re-binning through different break vectors, which is
 # uncontrollable. Per-segment alpha is the correct mechanism.
+#
+# feature_targets: named list keyed by quarter label, each containing a named
+# list keyed by segment ("0"-"4"), each containing a named numeric vector of
+# per-feature CSI targets (feature_1 through feature_5). NULL = build from
+# default Q3 schedule scaled proportionally.
 generate_cohort <- function(
   quarters = list(
     "2025-10-01" = c("0" = 0.00, "1" = 0.00, "2" = 0.00, "3" = 0.00, "4" = 0.00),
@@ -127,8 +200,42 @@ generate_cohort <- function(
     "2026-04-01" = c("0" = 0.18, "1" = 0.05, "2" = 0.12, "3" = 0.03, "4" = 0.08),
     "2026-07-01" = c("0" = 0.30, "1" = 0.09, "2" = 0.25, "3" = 0.04, "4" = 0.15)
   ),
+  feature_targets = NULL,
   seed = 42L
 ) {
+  # --- Build default feature_targets if NULL ---
+  if (is.null(feature_targets)) {
+    q3_csi <- list(
+      "0" = c(feature_1 = 0.28, feature_2 = 0.02, feature_3 = 0.19,
+              feature_4 = 0.01, feature_5 = 0.03),
+      "1" = c(feature_1 = 0.04, feature_2 = 0.02, feature_3 = 0.05,
+              feature_4 = 0.01, feature_5 = 0.02),
+      "2" = c(feature_1 = 0.22, feature_2 = 0.03, feature_3 = 0.06,
+              feature_4 = 0.02, feature_5 = 0.04),
+      "3" = c(feature_1 = 0.02, feature_2 = 0.01, feature_3 = 0.02,
+              feature_4 = 0.01, feature_5 = 0.01),
+      "4" = c(feature_1 = 0.11, feature_2 = 0.02, feature_3 = 0.04,
+              feature_4 = 0.02, feature_5 = 0.03)
+    )
+    qt_names <- names(quarters)
+    n_qt <- length(qt_names)
+    csi_scales <- c(0, 0.25, 0.50, 1.00)
+    if (n_qt != 4L) csi_scales <- seq(0, 1, length.out = n_qt)
+    feature_targets <- setNames(lapply(seq_along(qt_names), function(i) {
+      lapply(q3_csi, function(v) v * csi_scales[i])
+    }), qt_names)
+  }
+
+  # --- Validate feature_targets matches quarters ---
+  stopifnot("feature_targets quarters must match quarters" =
+              setequal(names(feature_targets), names(quarters)))
+  for (qt in names(quarters)) {
+    if (!setequal(names(feature_targets[[qt]]), names(quarters[[qt]]))) {
+      stop("feature_targets segments must match quarters segments for ", qt,
+           call. = FALSE)
+    }
+  }
+
   set.seed(seed)
 
   all_apps <- vector("list", length(quarters))
@@ -362,5 +469,117 @@ generate_cohort <- function(
     message(sprintf("    alphas:  %s", alpha_str))
   }
 
-  list(apps = apps, scorecard = scorecard, meta = meta)
+  # --- Phase 2: Feature generation (independent RNG stream, D17) ---
+  # PSI is RNG-invariant (bin counts are deterministic, integer scores with +1L
+  # boundary alignment always map back to their originating bin). Separate RNG
+  # stream is defensive good practice, not a requirement.
+  set.seed(seed + 1000L)
+  all_features <- vector("list", length(quarters))
+
+  for (q_idx in seq_along(quarters)) {
+    quarter_start <- names(quarters)[q_idx]
+    apps_df <- all_apps[[q_idx]]
+    scorecard_df <- all_scorecard[[q_idx]]
+    ft <- feature_targets[[quarter_start]]
+
+    n <- nrow(apps_df)
+
+    # Segment lookup from scorecard
+    seg_map <- setNames(scorecard_df$segment, scorecard_df$user_ref_num)
+    seg_for_app <- seg_map[apps_df$user_ref_num]
+
+    # Core population: same filters as Rmd PSI pipeline
+    is_core <- apps_df$client_product_cd %in% c("CC", "PLAT", "GOLD") &
+               !is.na(apps_df$prim_score) &
+               !is.na(seg_for_app)
+
+    feat_matrix <- vector("list", length(feature_defs))
+    names(feat_matrix) <- names(feature_defs)
+    feat_alphas <- list()
+    feat_min_counts <- integer(0)
+
+    for (fname in names(feature_defs)) {
+      fdef <- feature_defs[[fname]]
+      if (fdef$type == "continuous") {
+        vals <- rep(NA_real_, n)
+        nb <- fdef$n_bins
+        dw <- NULL
+      } else {
+        vals <- rep(NA_character_, n)
+        nb <- length(fdef$dev_weights)
+        dw <- fdef$dev_weights
+      }
+
+      seg_alphas <- numeric(length(segment_volumes))
+      names(seg_alphas) <- names(segment_volumes)
+
+      # Core rows: per-segment drift
+      for (seg in names(segment_volumes)) {
+        seg_idx <- which(is_core & seg_for_app == seg)
+        N_seg <- length(seg_idx)
+        if (N_seg == 0L) next
+
+        target_csi <- ft[[seg]][fname]
+        alpha <- solve_alpha(target_csi, nb, dw, fdef$tilt_dir)
+        seg_alphas[seg] <- alpha
+        weights <- tilt_weights(alpha * fdef$tilt_dir, nb, dw)
+        counts <- deterministic_allocate(N_seg, weights)
+        stopifnot(min(counts) >= 50)
+        feat_min_counts <- c(feat_min_counts, min(counts))
+        vals[seg_idx] <- generate_feature_values(fdef, counts)
+      }
+
+      # Non-core rows: baseline (alpha = 0)
+      non_core_idx <- which(!is_core)
+      if (length(non_core_idx) > 0L) {
+        N_nc <- length(non_core_idx)
+        if (fdef$type == "continuous") {
+          w_nc <- rep(1 / fdef$n_bins, fdef$n_bins)
+        } else {
+          w_nc <- fdef$dev_weights
+        }
+        counts_nc <- deterministic_allocate(N_nc, w_nc)
+        vals[non_core_idx] <- generate_feature_values(fdef, counts_nc)
+      }
+
+      feat_matrix[[fname]] <- vals
+      feat_alphas[[fname]] <- seg_alphas
+    }
+
+    features_df <- data.frame(
+      user_ref_num = apps_df$user_ref_num,
+      feature_date = apps_df$dt_entered,
+      stringsAsFactors = FALSE
+    )
+    for (fname in names(feat_matrix)) {
+      features_df[[fname]] <- feat_matrix[[fname]]
+    }
+    all_features[[q_idx]] <- features_df
+
+    # Add feature meta to existing quarter meta
+    meta[[quarter_start]]$feature_alphas <- feat_alphas
+    meta[[quarter_start]]$feature_min_count <- min(feat_min_counts)
+    meta[[quarter_start]]$n_features <- nrow(features_df)
+  }
+
+  features <- do.call(rbind, all_features)
+  rownames(features) <- NULL
+
+  stopifnot("Duplicate user_ref_num in features" =
+              !anyDuplicated(features$user_ref_num))
+
+  # Every non-NA user_ref_num in apps has a features row
+  apps_urns <- apps$user_ref_num[!is.na(apps$user_ref_num)]
+  stopifnot("All apps URNs have features" =
+              all(apps_urns %in% features$user_ref_num))
+
+  message("Generated ", nrow(features), " features rows")
+  for (qs in names(meta)) {
+    m <- meta[[qs]]
+    if (!is.null(m$feature_min_count)) {
+      message(sprintf("  %s: feature min_count=%d", qs, m$feature_min_count))
+    }
+  }
+
+  list(apps = apps, scorecard = scorecard, features = features, meta = meta)
 }

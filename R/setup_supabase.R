@@ -20,19 +20,23 @@ setup_supabase <- function(mode = c("minimal", "generated")) {
 
   DBI::dbExecute(conn, "DROP TABLE IF EXISTS applications CASCADE")
   DBI::dbExecute(conn, "DROP TABLE IF EXISTS scorecard CASCADE")
+  DBI::dbExecute(conn, "DROP TABLE IF EXISTS features CASCADE")
 
   execute_sql_file(conn, here::here("sql/01_create_tables.sql"))
+  execute_sql_file(conn, here::here("sql/03_create_features_table.sql"))
 
   if (mode == "minimal") {
     execute_sql_file(conn, here::here("sql/02_seed_minimal.sql"))
-    message("Setup complete: minimal seed loaded (50 apps, 40 scorecard).")
+    message("Setup complete: minimal seed loaded (50 apps, 40 scorecard, 40 features).")
   } else {
     source(here::here("R/generate_cohort.R"))
     result <- generate_cohort()
     DBI::dbAppendTable(conn, "applications", result$apps)
     DBI::dbAppendTable(conn, "scorecard", result$scorecard)
+    DBI::dbAppendTable(conn, "features", result$features)
     message("Setup complete: generated cohorts loaded (",
             nrow(result$apps), " apps, ",
-            nrow(result$scorecard), " scorecard rows).")
+            nrow(result$scorecard), " scorecard, ",
+            nrow(result$features), " features rows).")
   }
 }
