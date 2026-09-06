@@ -1,26 +1,28 @@
 # R/ Catalog
 
-Sourced R scripts. `pull_apps.R`, `function_cc_scorecard_data.R`, and
-`build_dev_population.R` are called before the validated frontier (line 453;
-anchor: `# QC: Validated`). The remaining 8 scripts are commented out at
-`orchestration_2.Rmd:78` (PENDING TRANSCRIPTION marker).
+Sourced R scripts. `pull_apps.R`, `function_cc_scorecard_data.R`,
+`pull_features.R`, `compute_si.R`, and `build_dev_population.R` are called
+before the validated frontier (line 487; anchor: `# QC: Validated`). The
+remaining 8 scripts are commented out at `orchestration_2.Rmd:79` (PENDING
+TRANSCRIPTION marker).
 
 | File | Status | Purpose | Key functions | Read by |
 |---|---|---|---|---|
 | `db.R` | FLATTENED | Shared `db_connect()` helper | `db_connect()` | Sourced by `pull_apps.R`, `function_cc_scorecard_data.R`, `setup_supabase.R` |
 | `setup_supabase.R` | CREATED | Idempotent table setup (DROP + CREATE + seed or generated) | `setup_supabase(mode)` | Manual setup |
 | `generate_cohort.R` | CREATED | Parameterized cohort generator (4 quarters, drift via tilt weights, D6/D16/D17). Generalized solver for categorical features. Features in Phase 2 with independent RNG. | `generate_cohort(quarters, feature_targets, seed)` | `R/setup_supabase.R` (mode="generated") |
-| `pull_features.R` | CREATED | Pull feature data (7 cols from `features` table, D17) | `get_features_data()` | CSI computation (build-csi-calculation) |
-| `pull_apps.R` | FLATTENED | Pull application data (14 cols from flat `applications` table) | `get_apps_data()` | `orchestration_2.Rmd:132` (anchor: `get_apps_data` call in cache-miss branch) |
-| `function_cc_scorecard_data.R` | FLATTENED | Pull scorecard data (8 cols from flat `scorecard` table) | `get_cc_scorecard_data()` | `orchestration_2.Rmd:114` (anchor: `get_cc_scorecard_data` call in cache-miss branch) |
-| `build_dev_population.R` | CREATED | Generate development population reference (120 rows, frozen vigintile bins, D15) | `build_dev_population(output_path)` | `orchestration_2.Rmd:266` (anchor: `source` + `build_dev_population` call in PSI chunk) |
-| `feature_breaks.R` | CREATED | Frozen feature binning reference for CSI (D18). Literal list definition — 3 continuous (evenly-spaced breaks), 2 categorical (level sets + dev_counts). Global, not per-segment. All five total 10,000. | `feature_breaks` (list) | CSI computation (build-csi-calculation) |
+| `compute_si.R` | CREATED | Shared stability index kernel for PSI and CSI (D19). Computes percent_dev/current, K-L divergence, epsilon floor, Total rows, summary. Asserts sum(percent_dev)==1 per group. | `compute_stability_index(joined_df, epsilon)` | `orchestration_2.Rmd:267` (PSI chunk), `orchestration_2.Rmd:335` (CSI chunk, via prior source) |
+| `pull_features.R` | CREATED | Pull feature data (7 cols from `features` table, D17) | `get_features_data()` | `orchestration_2.Rmd:352` (anchor: `get_features_data` call in CSI cache-miss branch) |
+| `pull_apps.R` | FLATTENED | Pull application data (14 cols from flat `applications` table) | `get_apps_data()` | `orchestration_2.Rmd:133` (anchor: `get_apps_data` call in cache-miss branch) |
+| `function_cc_scorecard_data.R` | FLATTENED | Pull scorecard data (8 cols from flat `scorecard` table) | `get_cc_scorecard_data()` | `orchestration_2.Rmd:115` (anchor: `get_cc_scorecard_data` call in cache-miss branch) |
+| `build_dev_population.R` | CREATED | Generate development population reference (120 rows, frozen vigintile bins, D15) | `build_dev_population(output_path)` | `orchestration_2.Rmd:268` (anchor: `source` + `build_dev_population` call in PSI chunk) |
+| `feature_breaks.R` | CREATED | Frozen feature binning reference for CSI (D18). Literal list definition — 3 continuous (evenly-spaced breaks), 2 categorical (level sets + dev_counts). Global, not per-segment. All five total 10,000. | `feature_breaks` (list) | `orchestration_2.Rmd:338` (anchor: `source(here::here("R/feature_breaks.R"))` in CSI chunk) |
 | `build_feature_breaks.R` | CREATED | Bootstrap + freeze-check for `feature_breaks.R` (D18). Generates file from feature_defs if absent; validates against feature_defs and Q4 2025 data if present. | `build_feature_breaks(seed)` | Manual validation |
-| `pull_trended_data.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:74` (PENDING TRANSCRIPTION marker) |
-| `pull_early_trended_data.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:74` |
-| `function_join_apps_perf.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:74` |
-| `pull_score_mapping.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:74` |
-| `calculate_early_ks.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:74` |
-| `calculate_true_bad_ks.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:74` |
-| `build_ks_report_tables.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:74` |
-| `build_ks_rank_order.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:74` |
+| `pull_trended_data.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` (PENDING TRANSCRIPTION marker) |
+| `pull_early_trended_data.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
+| `function_join_apps_perf.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
+| `pull_score_mapping.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
+| `calculate_early_ks.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
+| `calculate_true_bad_ks.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
+| `build_ks_report_tables.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
+| `build_ks_rank_order.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |

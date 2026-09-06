@@ -4,12 +4,12 @@ Quarterly monitoring pipeline for a custom credit card application scorecard.
 Rebuilds production pipeline (DB2/Databricks) from OCR screenshots, rewired to
 Supabase (Postgres) with generic tables.
 
-Primary orchestrator: `orchestration_2.Rmd` (~2,627 lines, ~28 chunks).
-Validated frontier: line 453 (`# QC: Validated`) — VALIDATED: has run
+Primary orchestrator: `orchestration_2.Rmd` (~2,661 lines, ~28 chunks).
+Validated frontier: line 487 (`# QC: Validated`) — VALIDATED: has run
 against live Supabase (D5). psi_df: 30,500 rows (generated cohort), segments
-0-4. PSI + CSI stub run clean through :450.
-  (anchor: :453 = `# QC: Validated` marker)
-  (anchor: :399 = `# QC: Completed` marker)
+0-4. PSI + CSI run clean through :485.
+  (anchor: :487 = `# QC: Validated` marker)
+  (anchor: :327 = `# QC: Completed` marker)
 
 cohort_date (orchestration_2.Rmd:66-69): overridable parameter, defaults to
 current quarter. Set `cohort_date <- as.Date("YYYY-MM-DD")` before running
@@ -20,14 +20,16 @@ the setup chunk to select a different quarter.
 Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`,
 `scrub-rmd-credentials`, `create-supabase-tables`, `make-rmd-run-to-marker`,
 `build-psi-calculation`, `sample-data-generator`, `create-features-table`,
-`build-feature-breaks`.
-Next sequence: build-csi-calculation -> round-trip test -> fix-orchestration-rmd.
+`build-feature-breaks`, `build-csi-calculation`.
+Next sequence: round-trip test -> fix-orchestration-rmd.
 
-CSI (orchestration_2.Rmd:401-450, connection stub at :409-411) is now inside
-the validated frontier. It is a third data source; D13 stub replaces original
-connection block. Gets its own table and iteration.
-  (anchor: :405 = CSI chunk opening fence `\`\`\`{r}` preceding the D13 stub)
-  (anchor: :409-411 = D13 stub comment block)
+CSI (orchestration_2.Rmd:329-485) is fully built: pulls features, joins to PSI
+population, computes CSI per feature x segment using the shared
+`compute_stability_index()` helper in `R/compute_si.R` (D19). PSI chunk
+refactored to use the same helper. Outputs `csi_quarterly.xlsx` (5 tabs, one
+per feature) and `csi_summary` (6 segments x 5 features).
+  (anchor: :335 = CSI chunk opening fence `\`\`\`{r}`)
+  (anchor: :267 = `source(here::here("R/compute_si.R"))` in PSI chunk)
 
 ## Pull function contracts
 
@@ -38,6 +40,7 @@ connection block. Gets its own table and iteration.
 | `generate_cohort(quarters, feature_targets, seed)` | `R/generate_cohort.R` | list: `$apps` (data.frame, ~141k rows), `$scorecard` (data.frame, ~137k rows), `$features` (data.frame, ~141k rows), `$meta` (per-quarter stats). Per-segment alpha solved from target_psi via bisection (D16). Features generated in Phase 2 with independent RNG stream (D17). Generalized solver accepts dev_weights for categorical features. Bin counts deterministic. |
 | `get_features_data(performance_window, write)` | `R/pull_features.R` | data.frame: one row per user_ref_num (D9). 7 columns: user_ref_num, feature_date, feature_1 (NUMERIC), feature_2 (NUMERIC), feature_3 (NUMERIC), feature_4 (TEXT), feature_5 (TEXT). Writes `data/features/features_YYYYMM.txt.gz` if `write=T`. |
 | `build_feature_breaks(seed)` | `R/build_feature_breaks.R` | Bootstraps `R/feature_breaks.R` if absent; validates against feature_defs and generated data if present (D18). Fails loudly on drift. |
+| `compute_stability_index(joined_df, epsilon)` | `R/compute_si.R` | list: `$detail` (named list of tibbles per Scorecard, each with Total row), `$summary` (tibble: Scorecard, SI_value, current_count, epsilon_only, epsilon_share). Shared kernel for PSI and CSI (D19). Asserts sum(percent_dev)==1 per group. |
 
 ## Supabase tables
 
@@ -57,7 +60,7 @@ Schema: `sql/01_create_tables.sql`, `sql/03_create_features_table.sql`. Setup: `
 
 | What | Where |
 |---|---|
-| Decisions (D1-D18) | `.claude/docs/decisions.md` |
+| Decisions (D1-D19) | `.claude/docs/decisions.md` |
 | Pass artifacts | `.claude/passes/<task-name>/` |
 | R script catalog | `R/CATALOG.md` |
 | Project catalog | `CATALOG.md` |

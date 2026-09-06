@@ -75,6 +75,7 @@ stopifnot(all(unlist(ks_methods %in% c('live', 'fixed', 'true'))))
 
 source('R/pull_apps.R')
 source('R/function_cc_scorecard_data.R')
+source('R/pull_features.R')
 # PENDING TRANSCRIPTION — not yet OCR'd, not needed before the QC marker
 ```
 
@@ -262,7 +263,8 @@ and write to a cached xlsx with one tab per segment.
 # ---------------------------------------------------------------------------
 
 # --- PSI Calculation ---
-# Load development population reference (frozen vigintile bins, uniform counts)
+# Load shared stability index helper and development population reference
+source(here::here("R/compute_si.R"))
 source(here::here("R/build_dev_population.R"))
 dev_pop <- build_dev_population(here::here("data/dev_population/dev_population.txt.gz"))
 
@@ -279,112 +281,38 @@ stopifnot("Dev bins have NAs - join key mismatch" =
 stopifnot("Expected 120 rows (6 segments x 20 bins)" =
             nrow(psi_joined) == 120)
 
-# --- PSI formula ---
 # Zero-bin policy (D14): floor at epsilon to avoid ln(0) = -Inf.
-# Flooring biases PSI upward; the alternative (dropping empty bins) understates
-# drift by hiding exactly the bins where the population vanished.
 psi_epsilon <- 0.0001
 
-psi_data <- psi_joined |>
+# PSI-specific: assert uniform 5% dev (guaranteed by construction for vigintiles)
+dev_pcts <- psi_joined |>
   dplyr::group_by(Scorecard) |>
-  dplyr::mutate(
-    segment_total   = sum(counts),
-    percent_dev     = counts_dev / sum(counts_dev),
-    percent_current = dplyr::if_else(
-      segment_total == 0,
-      psi_epsilon,
-      counts / segment_total
-    ),
-    percent_current = dplyr::if_else(percent_current == 0, psi_epsilon, percent_current),
-    # Flag individual bins that were epsilon-floored (zero counts in a non-empty segment)
-    epsilon_floored = (counts == 0 & segment_total > 0),
-    # Flag segments where PSI is computed entirely from epsilon (no real data)
-    epsilon_only    = segment_total == 0
-  ) |>
-  dplyr::ungroup()
-
-# Assert dev percentages are all exactly 5% (uniform by construction)
-dev_pcts <- psi_data |>
-  dplyr::distinct(Scorecard, Lower_Range, .keep_all = TRUE) |>
-  dplyr::pull(percent_dev)
+  dplyr::mutate(p = counts_dev / sum(counts_dev)) |>
+  dplyr::pull(p)
 stopifnot("Dev percentages are not all 5%" = all(dev_pcts == 0.05))
 
-psi_data <- psi_data |>
-  dplyr::mutate(
-    `Difference (B-A)`            = percent_current - percent_dev,
-    `Proportion (B/A)`            = percent_current / percent_dev,
-    `Log of Proportion (B/A)`     = log(`Proportion (B/A)`),
-    `Population Divergence (K-L)` = `Difference (B-A)` * `Log of Proportion (B/A)`
-  )
+# Compute stability index (shared helper — also used by CSI)
+psi_result <- compute_stability_index(psi_joined, epsilon = psi_epsilon)
 
-# Assert no Inf/NaN in population divergence
-stopifnot("Inf or NaN in Population Divergence (K-L)" =
-            all(is.finite(psi_data$`Population Divergence (K-L)`)))
-
-# Warn on segments computed entirely from epsilon
-epsilon_segments <- unique(psi_data$Scorecard[psi_data$epsilon_only])
-if (length(epsilon_segments) > 0) {
-  warning("PSI for these segments is meaningless (zero applications, computed entirely from epsilon floor): ",
-          paste(epsilon_segments, collapse = ", "))
-}
-
-# --- Split into per-segment tibbles with Total row ---
-psi_data_list <- psi_data |>
-  dplyr::select(Scorecard, Lower_Range, Upper_Range, counts_dev, counts,
-                percent_dev, percent_current, `Difference (B-A)`,
-                `Proportion (B/A)`, `Log of Proportion (B/A)`,
-                `Population Divergence (K-L)`, epsilon_floored, epsilon_only) |>
-  dplyr::group_by(Scorecard) |>
-  dplyr::group_split()
-
-names(psi_data_list) <- purrr::map_chr(psi_data_list, ~ .x$Scorecard[1])
-
-# Append a Total row to each tibble
-psi_data_list <- purrr::map(psi_data_list, function(tbl) {
-  totals_row <- tibble::tibble(
-    Scorecard                       = tbl$Scorecard[1],
-    Lower_Range                     = NA_real_,
-    Upper_Range                     = NA_real_,
-    counts_dev                      = sum(tbl$counts_dev),
-    counts                          = sum(tbl$counts),
-    percent_dev                     = sum(tbl$percent_dev),
-    percent_current                 = sum(tbl$percent_current),
-    `Difference (B-A)`              = NA_real_,
-    `Proportion (B/A)`              = NA_real_,
-    `Log of Proportion (B/A)`       = NA_real_,
-    `Population Divergence (K-L)`   = sum(tbl$`Population Divergence (K-L)`),
-    epsilon_floored                 = NA,
-    epsilon_only                    = tbl$epsilon_only[1]
-  )
-  dplyr::bind_rows(tbl, totals_row)
-})
-
-# --- PSI summary ---
-psi_summary <- purrr::map_dfr(psi_data_list, function(x) {
-  data_rows <- dplyr::filter(x, !is.na(Lower_Range))
-  total_row <- dplyr::filter(x, is.na(Lower_Range))
-  total_psi <- total_row$`Population Divergence (K-L)`
-  eps_divergence <- sum(
-    data_rows$`Population Divergence (K-L)`[data_rows$epsilon_floored],
-    na.rm = TRUE
-  )
-  tibble::tibble(
-    Scorecard                   = total_row$Scorecard,
-    Population_Stability_Index  = total_psi,
-    current_count               = total_row$counts,
-    epsilon_only                = total_row$epsilon_only,
-    epsilon_share               = dplyr::if_else(
-      total_psi > 0, eps_divergence / total_psi, 0
-    )
-  )
-})
-
-psi_summary
-
-# --- Write xlsx (handoff format — column names are load-bearing) ---
+# Restore PSI column selection and order for downstream compatibility.
 # Downstream formatters at :737 read psi_data back FROM the xlsx cache.
 # openxlsx::read.xlsx applies make.names(): Lower_Range -> Lower.Range.
 # This is a known transformation; the formatter must account for it.
+psi_col_order <- c("Scorecard", "Lower_Range", "Upper_Range", "counts_dev",
+                   "counts", "percent_dev", "percent_current",
+                   "Difference (B-A)", "Proportion (B/A)",
+                   "Log of Proportion (B/A)", "Population Divergence (K-L)",
+                   "epsilon_floored", "epsilon_only")
+psi_data_list <- purrr::map(psi_result$detail, function(tbl) {
+  tbl |> dplyr::select(dplyr::all_of(psi_col_order))
+})
+
+psi_summary <- psi_result$summary |>
+  dplyr::rename(Population_Stability_Index = SI_value)
+
+psi_summary
+
+# --- Write xlsx ---
 wb <- openxlsx::createWorkbook()
 purrr::walk(names(psi_data_list), function(nm) {
   openxlsx::addWorksheet(wb, nm)
@@ -398,56 +326,162 @@ openxlsx::saveWorkbook(wb,
 
 # QC: Completed
 
-#CSI
+## CSI
 
-We will need to build out another supabase table for the CSI pull to query against. We can build this to have user_ref_num as the join key and then 5 feature columns labeled feature_n. The query could be modularized into an R script similar to R/pull_apps.R and should be structured similarly. After the pull, we want to aggregate the data into tables similarly to how psi is aggregated into vigintiles. These tables should be aggregates of each scorecard segment grouped by each feature_n column broken into quantiles with the counts of user_ref_num per quantile and a column for distribution of the current cohort population per bin. This allows for a similar calculation to PSI, but for each feature - thus the characteristic stability index value. 
+CSI evaluates drift in the model's input features. Each feature is binned using
+frozen development-population breaks (D18) and compared to the dev distribution.
+The CSI population is derived from psi_df to guarantee identity with the PSI
+population.
 
 ```{r}
-# model input window(B)
-# model input window(A)
+# --- CSI: Feature Stability ---
+source(here::here("R/feature_breaks.R"))
+fs::dir_create(here::here("data/features"))
 
-# CSI data pull — OUT OF SCOPE this iteration (D13).
-# Production connected to a separate BI warehouse. Will be replaced by a
-# Supabase table and its own pull function once the validated marker reaches this section.
+# Pull + cache (mirrors apps/scorecard pattern at :103-137)
+feat_paths <- fs::dir_ls("data/features")[which(
+  basename(fs::dir_ls("data/features")) %in% c(
+    glue::glue("features_{format(as.Date(cohort_date), '%Y%m')}.txt.gz"),
+    glue::glue("features_{format(as.Date(cohort_date) %m+% months(1), '%Y%m')}.txt.gz"),
+    glue::glue("features_{format(as.Date(cohort_date) %m+% months(2), '%Y%m')}.txt.gz")
+  )
+)]
 
-# take a chunk blanker(c)
+if (length(feat_paths) != 3) {
+  purrr::walk(seq(cohort_date, cohort_date %m+% months(2), "month"),
+              function(m) get_features_data(performance_window = m, write = TRUE))
+}
 
-# function our monthly tables, window prescribed [#] return to large result sets
-#fetch_rslt_month <- function(conn, [list_dt, end_dt]
-# message(glue::glue('[{t list_dt[UNCLEAR]}] to [end_dt]'))
-# odbc::dbGetQuery(
-# conn,
-# [Statement = glue::glue('SELECT
-#
-# WHEN PP.PDAY < SEGDAY IS Null THEN {
-# WHEN PPDAY < SEGDAY Is NOT NULL THEN PPDAY = SEGDAY
-# END
-# WHEN PRIMACY > SECDAY IS Null pick A
-# WHEN PRIMACY > SECDAY IS NOT NULL THEN PRIMACY > SECDAY
-# END AS INSERT;
-# CASE
-# WHEN [UNCLEAR]COMP) = 'Y' Then 1
-# WHEN [UNCLEAR]COMP) = 'N' Then 2
-# WHEN TRIM(COMP) = 'Y'
-# WHEN TRIM(COMP) = 'N' THEN 1
-# END AS INSERT;
-# CASE
-# WHEN TRIM(RARA)) = 'Y' THEN B
-# WHEN TRIM(RARA).Pt] = 'V' THEN B
-# END OF WINDOW;
-# CASE
-# WHEN PRIMACY IS NULL THEN 0
-# WHEN month(PRIMACY) != month(FREE_DATE [T])
-# and PRIMACY = and_PRIMACY_DATE [T]
-# WHEN TRIM(TCAT) = 'LIES' then 0
-# WHEN month(PRIMACY) != months_between(and_date_df, PRIMACY)
-# ELSE 0
-# END
-# [UNCLEAR][UNCLEAR](root_list_[UNCLEAR]current(Mapped
-# FROM
-# [UNCLEAR][UNCLEAR]_data_it <- [UNCLEAR][UNCLEAR]
-# and end_date_dt <= "end_dt")')
+# Read from cache
+features <- purrr::map_dfr(seq_len(number_of_month_window), function(i) {
+  data.table::fread(glue::glue(
+    "data/features/features_{format(cohort_date %m+% months(i - 1), '%Y%m')}.txt.gz"
+  ))
+})
+names(features) <- tolower(names(features))
+features <- features |> dplyr::mutate(user_ref_num = as.numeric(user_ref_num))
 
+# Join to PSI population (guarantees identical population — same filters applied)
+csi_df <- dplyr::inner_join(
+  psi_df |> dplyr::select(user_ref_num, segment),
+  features,
+  by = "user_ref_num"
+)
+
+# --- Per-feature CSI ---
+csi_results <- list()
+csi_summary_rows <- list()
+
+for (fname in names(feature_breaks)) {
+  fb <- feature_breaks[[fname]]
+  vals <- csi_df[[fname]]
+
+  # Bin: integer index (1:n_bins). Join key is structural, not label-based.
+  if (fb$type == "continuous") {
+    bin_idx <- as.integer(cut(vals, breaks = fb$breaks,
+                              right = TRUE, include.lowest = TRUE))
+    n_bins <- length(fb$dev_counts)
+    bin_labels <- paste(head(fb$breaks, -1), tail(fb$breaks, -1), sep = " to ")
+  } else {
+    bin_idx <- as.integer(factor(vals, levels = fb$levels))
+    n_bins <- length(fb$levels)
+    bin_labels <- fb$levels
+  }
+
+  # Assert no NA bin index (value outside declared bins/levels)
+  stopifnot("Feature value outside declared bins/levels" = !anyNA(bin_idx))
+
+  # Aggregation: per segment + All Segments
+  binned <- dplyr::tibble(
+    user_ref_num = csi_df$user_ref_num,
+    Scorecard    = as.character(as.numeric(csi_df$segment)),
+    bin_index    = bin_idx
+  )
+
+  agg_by_seg <- binned |>
+    dplyr::group_by(Scorecard, bin_index) |>
+    dplyr::summarise(counts = dplyr::n(), .groups = "drop")
+
+  agg_all <- binned |>
+    dplyr::mutate(Scorecard = "All Segments") |>
+    dplyr::group_by(Scorecard, bin_index) |>
+    dplyr::summarise(counts = dplyr::n(), .groups = "drop")
+
+  agg <- dplyr::bind_rows(agg_all, agg_by_seg)
+
+  # Dev reference: 6 segments x n_bins rows (global breaks — same for all)
+  dev_ref <- dplyr::bind_rows(lapply(
+    c("All Segments", as.character(0:4)),
+    function(seg) {
+      dplyr::tibble(
+        Scorecard  = seg,
+        bin_index  = seq_len(n_bins),
+        counts_dev = fb$dev_counts,
+        bin_label  = bin_labels
+      )
+    }
+  ))
+
+  # Full join from dev side; coalesce empty current bins to 0
+  csi_joined <- dplyr::full_join(dev_ref, agg,
+                                  by = c("Scorecard", "bin_index")) |>
+    dplyr::mutate(counts = dplyr::coalesce(counts, 0L))
+
+  # Assert full grid
+  expected_rows <- n_bins * 6L
+  if (nrow(csi_joined) != expected_rows) {
+    stop(fname, ": expected ", expected_rows, " rows, got ", nrow(csi_joined))
+  }
+
+  # Compute stability index (same helper as PSI)
+  result <- compute_stability_index(csi_joined, epsilon = psi_epsilon)
+
+  csi_results[[fname]] <- result
+  csi_summary_rows[[fname]] <- result$summary |>
+    dplyr::mutate(feature = fname)
+}
+
+# --- CSI summary table: 6 segments x 5 features ---
+csi_summary_long <- dplyr::bind_rows(csi_summary_rows)
+csi_summary <- csi_summary_long |>
+  dplyr::select(Scorecard, feature, CSI = SI_value) |>
+  tidyr::pivot_wider(names_from = feature, values_from = CSI)
+
+csi_summary
+
+# Epsilon share
+csi_eps_share <- csi_summary_long |>
+  dplyr::select(Scorecard, feature, epsilon_share) |>
+  tidyr::pivot_wider(names_from = feature, values_from = epsilon_share)
+
+csi_eps_share
+
+# --- Assert full bin grid: 10+8+5+4+3 = 30 bins per segment, 180 total ---
+total_data_rows <- sum(purrr::map_int(names(csi_results), function(fname) {
+  fb <- feature_breaks[[fname]]
+  n_bins <- if (fb$type == "continuous") length(fb$dev_counts) else length(fb$levels)
+  data_rows <- sum(purrr::map_int(
+    csi_results[[fname]]$detail,
+    ~ sum(!is.na(.x$bin_index))
+  ))
+  if (data_rows != n_bins * 6) {
+    stop(fname, ": expected ", n_bins * 6, " data rows, got ", data_rows)
+  }
+  data_rows
+}))
+stopifnot("Total data rows should be 180 (30 bins x 6 segments)" =
+            total_data_rows == 180)
+
+# --- Write xlsx: one tab per feature, segment as column ---
+wb_csi <- openxlsx::createWorkbook()
+purrr::walk(names(csi_results), function(fname) {
+  tab_data <- dplyr::bind_rows(csi_results[[fname]]$detail)
+  openxlsx::addWorksheet(wb_csi, fname)
+  openxlsx::writeDataTable(wb_csi, fname, tab_data)
+})
+openxlsx::saveWorkbook(wb_csi,
+  here::here("output_files/csi_quarterly.xlsx"),
+  overwrite = TRUE)
 ```
 
 # QC: Validated
