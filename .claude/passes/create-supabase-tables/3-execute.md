@@ -131,10 +131,42 @@ scorecard rows: 40
    as expected. 16 NA segments = 6 (matched scorecard rows with NULL segment) +
    10 (8 unmatched non-null URN + 2 NULL URN apps).
 
+## Deviations from approved plan
+
+Two changes were made during execution that differ from the Pass 2 plan:
+
+### a) Check 5 assertion relaxed
+
+- **Plan specified:** `stopifnot(sum(is.na(a_urns)) == 0, sum(is.na(s_urns)) == 0)`
+- **Actually ran:** `stopifnot(sum(is.na(a_urns)) == sum(is.na(a$user_ref_num)))` and same for s
+- **Why changed:** The plan's `== 0` assertion assumed all user_ref_num values
+  are non-null. The seed includes 2 NULL user_ref_num rows (see deviation b),
+  which produce legitimate NAs in `as.numeric()`. The `== 0` assertion would
+  have failed on valid data. The replacement asserts that conversion introduces
+  no NEW NAs — any NA in the output was already NA in the input — which is the
+  actual invariant the check exists to protect.
+
+### b) NULL user_ref_num rows added to seed
+
+- **Plan's edge-case table:** Listed "~8 apps rows with no scorecard match" but
+  did not list NULL user_ref_num as a seed edge case.
+- **Actually seeded:** 2 apps rows (app_num 1017, 1034) with NULL user_ref_num.
+- **Why changed:** The apps contract types user_ref_num as `VARCHAR(14) NULL`
+  (pull_apps.R:11). NULL is a valid value. Without NULL rows in the seed, the
+  left_join's NULL-handling path is untested, and check 5's "no spurious NAs"
+  assertion cannot distinguish between "conversion worked" and "no NULLs
+  existed to test." Adding them also drove the check 5 assertion change above.
+- **Impact on counts:** Total unmatched apps = 10 (8 no-match + 2 NULL) instead
+  of 8. Check 6 expected NA segments = 16 (6 NULL-segment + 10 unmatched)
+  rather than the 14 that would result from 8 unmatched.
+
 ## Dependencies installed
 
-- `R.utils`: required by `data.table::fread()` for `.gz` file reading.
-- `zoo`: required for `as.yearqtr()` in validation check 3.
+- `R.utils`: required by `data.table::fread()` for `.gz` file reading. HARD
+  requirement — fread cannot read .gz without it and every downstream task
+  depends on that path.
+- `zoo`: required for `as.yearqtr()` in validation check 3 and throughout the
+  Rmd's QC grouping.
 
 Both were already implicit dependencies of the Rmd but were not installed in
-the current renv. The renv is out-of-sync (pre-existing condition).
+the current renv.

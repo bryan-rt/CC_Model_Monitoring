@@ -50,6 +50,23 @@ Setup: `R/setup_supabase.R` (idempotent, DROP + CREATE + seed).
 | Project catalog | `CATALOG.md` |
 | SQL schema + seed | `sql/` |
 
+## Serialization contract
+
+The binding contract between Postgres and R is the gzipped CSV, not the
+Postgres schema. Types that arrive in R are what `fread` infers, not what
+Postgres declares:
+
+- `user_ref_num` (VARCHAR(14)) → `integer64` (bit64). Nobody chose this;
+  fread inferred it from 14-digit values. `as.numeric()` is exact at 1e13
+  (within 2^53). The join works because `scipen = 999` in fwrite
+  (`pull_apps.R:57`, `function_cc_scorecard_data.R:42`) prevents scientific
+  notation on write — without it, "1e+13" round-trips as character and the
+  join silently breaks.
+- `dt_entered` (DATE) → `IDate` (data.table's Date subclass). Inherits from
+  Date, so `zoo::as.yearqtr()` works.
+- `prim_score` (NUMERIC) → `integer` when all values are whole numbers.
+  `is.numeric(integer)` is TRUE in R.
+
 ## Evidence discipline
 
 - Cite `path:line` for load-bearing claims.
