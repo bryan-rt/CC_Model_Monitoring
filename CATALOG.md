@@ -1,6 +1,6 @@
 # Project Catalog
 
-**Validated frontier:** `orchestration_2.Rmd` line 300 (`# QC: Validated`)
+**Validated frontier:** `orchestration_2.Rmd` line 292 (`# QC: Validated`)
 
 ## Folder index
 
@@ -19,7 +19,6 @@
 | File | Status | Purpose | Key exports | Read by |
 |---|---|---|---|---|
 | `orchestration_2.Rmd` | CLEANED | Main orchestration notebook — PSI/CSI/KS quarterly report | Knitted HTML report | User (primary deliverable) |
-| `orchestration.Rmd` | SUPERSEDED | Original orchestration notebook (pre-cleanup) | — | Nothing (reference only) |
 | `CC_Model_Monitoring.Rproj` | CURRENT | RStudio project file | — | RStudio |
 | `.Rprofile` | CURRENT | R session profile | — | R session startup |
 | `renv.lock` | CURRENT | Package dependency lockfile | — | `renv::restore()` |

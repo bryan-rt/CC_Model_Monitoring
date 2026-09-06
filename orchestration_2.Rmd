@@ -13,7 +13,7 @@ here::i_am("orchestration_2.Rmd")
 
 ## Overview
 
-Member demographic data and application data is sent to Equifax on a monthly basis and uploaded into 9 tables within Ignite. The workflow below should be ran on a monthly basis to generate the 9 files needed to be sent to Equifax.
+TBD
 
 ## Running the Workflow
 
@@ -39,25 +39,17 @@ Select option 1 and the environment will be set up appropriately.
 # renv::init()
 ```
 
-### 1) Creating the Keyring File
+### 1) Credential Setup
 
-The set_keyring function is an internal designed function which will set up a keyring file in the posit environment for the user. This keyring file will handle user credentials when connecting with databases (e.g. 'EDWPROD', 'PRODODBC', 'Impala64', 'TSYS_DV_DB2', 'ASL', 'cpspace', 'MySQL_CPSpace', 'edu_lending'). The function has three inputs - db, test_passwords, and reset_outdated. Leaving the function empty will run the default settings. This will check for the existence of a keyring file with the 8 db connection details. It will then test the connections to each db to ensure the keyring file is up to date. If any passwords are outdated, the user will be prompted for a new password to save to the keyring file. Updates made here only updated the credentials saved in the keyring file.
-
-```{r}
-# Source the keyring setup function (uncomment if needed)
-# source(file = here::here('R/set_keyring.R'))
-#
-# Run to create/update keyring file (uncomment if needed)
-# set_keyring(#db = c("EDWPROD", "PRODODBC", "ASL"),
-#             test_passwords = T,
-#             reset_outdated = T)
-```
+Database credentials are supplied via environment variables from `.Renviron`;
+see `.Renviron.example`. In the production environment this section configured
+a credential store for the internal warehouses.
 
 ### 2) Setting the Project Paths
 
-All pointers in this project use soft paths via the {here} package. To ensure that the pointers are correct. Be sure that the `MPM_CCCustomScore` project is opened before proceeding. This ensures the working directory is set appropriately.
+All pointers in this project use soft paths via the {here} package. To ensure that the pointers are correct. Be sure that the `CC_Model_Monitoring` project is opened before proceeding. This ensures the working directory is set appropriately.
 
-Code and reference files are sourced within the `MPM_CCCustomScore` repo. Data is written in this directory as well as a mirrored location at opt/rspro/home/b9800/projects/shared_data/MPM_CCCustomScore/. This location will house data for collaboration without allowing contributors to edit original data sets.
+Code and reference files are sourced within the `CC_Model_Monitoring` repo. Data is written in this directory as well as a local `data/` folder.
 
 ### 3) Loading Functions & Globals
 
@@ -97,7 +89,7 @@ perf_paths <- fs::dir_ls('data/performance_24/')
 
 This section checks for required directories and creates them if missing. Run once per new project setup.
 
-**MRM** - after folder creation, copy all data from the mirrored shared directory into the cloned repo to preserve file pointers and code like: cp -r /mnt/c/sp/custom/path/AAAA/projects/shared_data/MRM_illustrations_/MRM_[UNCLEAR]/monitor/ to move files into the needed locations
+**Note** — after folder creation, copy any required data files into the local `data/` directory to preserve file pointers.
 
 ```{r, echo=FALSE}
 #------------------------------- Folder Structure ---------------------------------
@@ -140,7 +132,7 @@ paths <- fs::dir_ls('data/apps/')[which(basename(fs::dir_ls('data/apps/')) %in% 
 ))]
 
 if(length(paths) != 3){
-  scorecard <- purrr::map_dfr(seq(cohort_date, cohort_date %m-% months(2), 'month'),
+  apps <- purrr::map_dfr(seq(cohort_date, cohort_date %m-% months(2), 'month'),
                               .progress = TRUE,
                               function(model_input_window){
 
@@ -299,8 +291,10 @@ psi_raw_data
 
 # QC: Validated
 
-We use the following chunk to load-in a whole-file to provide a template
+We use the following chunk to reference the segment_breaks object to define the psi buckets, and join development data population counts per bin with the pulled current cohort. Development population counts per segment per bin are loaded from a static file. 
 
+Join ranges_refit with psi_raw_data on scorecard, lower range, upper range then calculate pis_data by taking the grouping by scorecard, determining the percent of total each bin is for the development population in percent_dev column and doing the same for percent_current, mutating the df to have the difference between the distributions at each bin, creating the proportion column  (percent_current / percent_dev), the log of proportion column, and finaly the population divergence column which should be the difference between the distributions * the log of the proportions. These are split into a list of tibbles per scorecard segment, so 6 tibbles including the All Segments. finally, write the list of tibbles with each scorecards psi to a cache xlsx file with a distinct tab per tibble. This should reflect the standard PSI calculation used by industry.
+ 
 ```{r}                                                                                                    
 
 albefile <- 'Output/Quarterly_Q2_1/loan_and_cd_event_DEFAULT.xlsx'
@@ -333,7 +327,7 @@ albefile_q_dft <- input_file(slot_1.deft.xlsx
 # 0                           openxlsx::read.xlsx(albefile_q_dft, sheet=openxlsx::getSheetName([slot[2]][1])),
 # 0                           openxlsx::read.xlsx(albefile_q_dft, sheet=openxlsx::getSheetName([slot[2]][2])))
 
-```
+
 #---------------------------------------------------------------------------
 # spreads: read.xlsx(albefile, sheet=openxlsx::getSheetName([slot][1])),
 # openxlsx::read.xlsx(albefile, sheet=openxlsx::getSheetName([slot][2])))
@@ -503,44 +497,21 @@ Population_Stability_Index = max( Population_Divergence_(D-A) * (x[b/A] ))
 })
 
 psi_summary
-?
 ```
 
+# QC: Target
+
+#CSI
+
+Features used to feed the system view model are pulled each quarter here. We load in the development population features used and the value stability index measurements so we can compare the distributions againstcurrent calculations.
+
 ```{r}
-#PSI-CSR Team
-
-# Features used to feed the system view model are pulled each quarter here. We load in the development
-# population features used and the value stability index measurements so we can compare the distributions against
-# current calculations.
-
---- {-}
 # model input window(B)
 # model input window(A)
 
-keyring::keyring_unlock(password = 'keyring')
-
-keys <- keyring::key_list()
-
-host <- 'adv-2496822760[UNCLEAR].ll.azuredatabricks.net'
-subscription_name <- 'SPACE-IT-PROD-BI'
-crdbplly_compute <- 'ascii-clust[UNCLEAR]/[UNCLEAR]2501[UNCLEAR]8[UNCLEAR]QI[UNCLEAR]-[UNCLEAR]1880-abKQgphre'
-sql_cmd <- DBI[UNCLEAR] <- DBI::dbConnect(drv,
-host = dplyr::filter(service == 'BI') |> dplyr::call().username),
-password = keyring::key_get('BI'),
-subscription_name = crdbplly_option_name
-)
-crdbplly_cluster <- crdbplly_compute
-# [UNCLEAR] = crdb[UNCLEAR].dry
-# crdbplly_cluster <- crdbplly_cluster
-
-sql_conn <- odbc::dbConnect(odbc::odbc(),
-DSN = 'BI',
-UID = dplyr::pull(dplyr::filter(keys,service == 'ABI'), username),
-PWD = keyring::key_get('BI'),
-Auth_Client_id = sql_cmd[UNCLEAR]flat_outp[UNCLEAR]ticks_token,),
-Host = host,
-HTTPPATH = compute_cluster,
-Token[UNCLEAR][UNCLEAR][UNCLEAR].Email.num = 0)
+# CSI data pull — OUT OF SCOPE this iteration (D13).
+# Production connected to a separate BI warehouse. Will be replaced by a
+# Supabase table and its own pull function once the validated marker reaches this section.
 
 # take a chunk blanker(c)
 

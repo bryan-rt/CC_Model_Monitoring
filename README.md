@@ -15,7 +15,7 @@ CC_Model_Monitoring/
 ├── output_files/
 ├── scripts/
 ├── reports/
-├── orchestration.Rmd
+├── orchestration_2.Rmd
 ├── renv.lock
 └── README.md
 ```
@@ -24,4 +24,4 @@ CC_Model_Monitoring/
 
 1. Open `CC_Model_Monitoring.Rproj` in RStudio
 2. Run `renv::restore()` to install dependencies
-3. Knit `orchestration.Rmd` to execute the pipeline
+3. Knit `orchestration_2.Rmd` to execute the pipeline

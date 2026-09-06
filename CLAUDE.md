@@ -4,8 +4,8 @@ Quarterly monitoring pipeline for a custom credit card application scorecard.
 Rebuilds production pipeline (DB2/Databricks) from OCR screenshots, rewired to
 Supabase (Postgres) with generic tables.
 
-Primary orchestrator: `orchestration_2.Rmd` (~2,800 lines, ~40 chunks).
-Validated frontier: line 300 (`# QC: Validated`) — but "validated" means reviewed,
+Primary orchestrator: `orchestration_2.Rmd` (~2,775 lines, ~29 chunks).
+Validated frontier: line 292 (`# QC: Validated`) — but "validated" means reviewed,
 not run. Code is validated only once it has run (D5).
 
 ## Current loop position
@@ -15,9 +15,10 @@ Next sequence: scrub-rmd-credentials -> simplify-rmd-psi-region ->
 create-supabase-tables -> round-trip test -> sample-data-generator ->
 fix-orchestration-rmd.
 
-CSI (orchestration_2.Rmd:509-634) is out of scope for this loop (D13). It is a
-third data source with its own warehouse connection and heavy OCR damage; it gets
-its own table and iteration once the validated marker reaches line 509.
+CSI (orchestration_2.Rmd:502-605, connection stub at :512-514) is out of scope
+for this loop (D13). It is a third data source; original connection block
+(formerly :520-543) replaced by a D13 stub. Gets its own table and iteration
+once the validated marker reaches line 502.
 
 ## Pull function contracts
 
@@ -44,6 +45,10 @@ its own table and iteration once the validated marker reaches line 509.
 - Reconcile, do not append: if a change makes adjacent text wrong, fix both.
 - Confirm the carrying path: a change correct in one file while the path that
   carries the value silently drops it is the recurring failure mode.
+- Any task that changes `orchestration_2.Rmd`'s line count must re-derive every
+  live line citation in CLAUDE.md, decisions.md, CATALOG.md, and R/CATALOG.md,
+  and report a before/after table. Pass artifacts are historical records and
+  are NOT updated; add a dated note to the affected pass directory instead.
 
 ## Update rule
 
