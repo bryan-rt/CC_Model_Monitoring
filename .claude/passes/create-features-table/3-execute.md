@@ -172,6 +172,21 @@ All >= 50. PASS.
 - scorecard: 136,840 (unchanged)
 - features: 141,720 (= apps, one row per user_ref_num)
 
+## Demonstrated result: segment-level monitoring
+
+Q3 2026 All Segments PSI = 0.0847, BELOW the 0.10 action threshold, while
+segment 0 = 0.3000 (investigate) and segment 2 = 0.2501. Segments 1/3/4 are
+near flat and pooling drags the aggregate down.
+
+This is the demonstrated argument for segment-level monitoring: the
+portfolio-level metric reads "no action" while a segment has deteriorated
+into the action band. Not a defect — a measured result, and the answer to
+"why not just track one number?"
+
+It also sets up the CSI payoff: segment 0's PSI of 0.30 is localised by CSI
+to feature_1 (0.2796) and feature_3 (0.1889), with its other three features
+near zero. Population shifted -> which segment -> which input.
+
 ## Documentation updated
 
 | File | What changed |
