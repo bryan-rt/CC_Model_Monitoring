@@ -3,7 +3,12 @@ library(lubridate)
 
 db_connect <- function() {
   url <- Sys.getenv("SUPABASE_DB_URL")
-  m <- regmatches(url, regexec("^postgresql://([^:]+):([^@]+)@([^:]+):(\\d+)/([^?]+)", url))[[1]]
+  m <- regmatches(url, regexec("^postgres(?:ql)?://([^:]+):([^@]+)@([^:]+):(\\d+)/([^?]+)", url))[[1]]
+  if (length(m) == 0) {
+    stop("SUPABASE_DB_URL is unset or malformed. Expected ",
+         "postgresql://user:password@host:port/dbname — see .Renviron.example",
+         call. = FALSE)
+  }
   DBI::dbConnect(
     RPostgres::Postgres(),
     host     = m[4],

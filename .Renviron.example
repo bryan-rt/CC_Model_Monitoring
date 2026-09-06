@@ -1,7 +1,8 @@
 # Supabase session pooler connection string (port 5432, Supavisor).
 # Copy this file to .Renviron, fill in <project_ref> and <password>, restart R.
 #
-# Format: postgresql://postgres.<project_ref>:<password>@<host>:5432/postgres?sslmode=require
+# Format: postgresql://postgres.<project_ref>:<password>@<host>:5432/postgres
+#   (sslmode=require is enforced R-side in db_connect(); query string params are ignored)
 #
 # IMPORTANT:
 #   - The username MUST be postgres.<project_ref>, not just "postgres".

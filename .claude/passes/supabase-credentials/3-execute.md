@@ -108,6 +108,12 @@ DROP TABLE: OK
 All connection tests passed.
 ```
 
+Test 2: `current_user = postgres` is expected — Supavisor uses the
+`.<project_ref>` suffix for routing while the underlying database role is
+`postgres`. This does not independently confirm the pooler-user format; that
+is implied by auth succeeding against the pooler host with the full
+`postgres.<project_ref>` username in the URL.
+
 Test 3 (parameterized `$1::int`) exercises libpq's extended query protocol,
 which creates server-side prepared statements. This confirms session pooler
 mode (port 5432) — transaction mode (port 6543) would fail here.
@@ -116,6 +122,24 @@ Test 4 (`CREATE TEMP TABLE`) exercises session-level state, a second
 confirmation of session mode.
 
 Connection properly disconnected via `on.exit(DBI::dbDisconnect(conn))`.
+
+---
+
+## Post-review fixes (applied after initial approval)
+
+Three fixes to `db_connect()` from branch review, treating the fallback as
+primary code:
+
+| # | Fix | Rationale |
+|---|---|---|
+| F1 | Regex scheme: `^postgresql://` → `^postgres(?:ql)?://` | Supabase dashboard displays `postgres://` in some places; libpq accepts both |
+| F2 | Guard: `if (length(m) == 0) stop(...)` before `dbConnect` | Without it, a malformed URL produces `host=NA` and a misleading connection error instead of pointing at `.Renviron` |
+| F3 | `.Renviron.example`: removed `?sslmode=require` from format template, noted sslmode is enforced R-side | Parser stops at `[^?]+`; the query string had no effect, making the instruction inert |
+
+All three applied byte-identically to both R files. `%||%` (base R 4.4.0+,
+renv.lock pins 4.3.1) was already absent from the committed fallback — the
+plan's fallback sketch used it but the executed version hardcoded
+`sslmode = "require"`, so fix #6 from the review was already satisfied.
 
 ---
 
