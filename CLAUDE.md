@@ -15,7 +15,7 @@ Next sequence: scrub-rmd-credentials -> simplify-rmd-psi-region ->
 create-supabase-tables -> round-trip test -> sample-data-generator ->
 fix-orchestration-rmd.
 
-CSI (orchestration_2.Rmd:502-605, connection stub at :512-514) is out of scope
+CSI (orchestration_2.Rmd:502-583, connection stub at :512-514) is out of scope
 for this loop (D13). It is a third data source; original connection block
 (formerly :520-543) replaced by a D13 stub. Gets its own table and iteration
 once the validated marker reaches line 502.
