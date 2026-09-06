@@ -4,24 +4,26 @@ Quarterly monitoring pipeline for a custom credit card application scorecard.
 Rebuilds production pipeline (DB2/Databricks) from OCR screenshots, rewired to
 Supabase (Postgres) with generic tables.
 
-Primary orchestrator: `orchestration_2.Rmd` (~2,669 lines, ~28 chunks).
-Validated frontier: line 236 (`# QC: Validated`) — VALIDATED: has run
-against live Supabase (D5). psi_df: 31 rows, segments 0-4.
-  (anchor: :236 = `# QC: Validated` marker)
+Primary orchestrator: `orchestration_2.Rmd` (~2,610 lines, ~28 chunks).
+Validated frontier: line 385 (`# QC: Validated`) — VALIDATED: has run
+against live Supabase (D5). psi_df: 31 rows, segments 0-4. PSI chunk runs
+clean through :382.
+  (anchor: :385 = `# QC: Validated` marker)
+  (anchor: :234 = `# QC: Completed` marker)
 
 ## Current loop position
 
 Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`,
-`scrub-rmd-credentials`, `create-supabase-tables`, `make-rmd-run-to-marker`.
-Next sequence: simplify-rmd-psi-region -> round-trip test ->
-sample-data-generator -> fix-orchestration-rmd.
+`scrub-rmd-credentials`, `create-supabase-tables`, `make-rmd-run-to-marker`,
+`build-psi-calculation`.
+Next sequence: round-trip test -> sample-data-generator -> fix-orchestration-rmd.
 
-CSI (orchestration_2.Rmd:452-527, connection stub at :456-458) is out of scope
+CSI (orchestration_2.Rmd:391-467, connection stub at :395-397) is out of scope
 for this loop (D13). It is a third data source; D13 stub replaces original
 connection block. Gets its own table and iteration once the validated marker
-reaches line 452.
-  (anchor: :452 = CSI chunk opening fence `\`\`\`{r}` preceding the D13 stub)
-  (anchor: :456-458 = D13 stub comment block)
+reaches line 391.
+  (anchor: :391 = CSI chunk opening fence `\`\`\`{r}` preceding the D13 stub)
+  (anchor: :395-397 = D13 stub comment block)
 
 ## Pull function contracts
 
@@ -45,7 +47,7 @@ Setup: `R/setup_supabase.R` (idempotent, DROP + CREATE + seed).
 
 | What | Where |
 |---|---|
-| Decisions (D1-D13) | `.claude/docs/decisions.md` |
+| Decisions (D1-D15) | `.claude/docs/decisions.md` |
 | Pass artifacts | `.claude/passes/<task-name>/` |
 | R script catalog | `R/CATALOG.md` |
 | Project catalog | `CATALOG.md` |
