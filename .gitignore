@@ -25,6 +25,7 @@ renv/staging/
 data/*.csv
 data/*.rds
 data/*.xlsx
+data/**/*.txt.gz
 
 # Output
 output_files/

@@ -10,15 +10,17 @@ not run. Code is validated only once it has run (D5).
 
 ## Current loop position
 
-Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`.
-Next sequence: scrub-rmd-credentials -> simplify-rmd-psi-region ->
-create-supabase-tables -> round-trip test -> sample-data-generator ->
-fix-orchestration-rmd.
+Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`,
+`scrub-rmd-credentials`, `create-supabase-tables`.
+Next sequence: simplify-rmd-psi-region -> round-trip test ->
+sample-data-generator -> fix-orchestration-rmd.
 
-CSI (orchestration_2.Rmd:502-583, connection stub at :512-514) is out of scope
-for this loop (D13). It is a third data source; original connection block
-(formerly :520-543) replaced by a D13 stub. Gets its own table and iteration
-once the validated marker reaches line 502.
+CSI (orchestration_2.Rmd:508-583, connection stub at :512-514) is out of scope
+for this loop (D13). It is a third data source; D13 stub replaces original
+connection block. Gets its own table and iteration once the validated marker
+reaches line 508.
+  (anchor: :508 = CSI chunk opening fence preceding the D13 stub)
+  (anchor: :512-514 = D13 stub comment block)
 
 ## Pull function contracts
 
@@ -26,6 +28,17 @@ once the validated marker reaches line 502.
 |---|---|---|
 | `get_apps_data(performance_window, write)` | `R/pull_apps.R` | data.frame: application-level, one row per app_num. 14 columns: app_num, user_ref_num, dt_entered, client_product_cd, strategy_version, assigned_credit_lim, decision, applied, org_paper_type, lao_credit_lmt, fico_score, bureau_used, acq, prim_score (NUMERIC, D8). Dropped: applid, logic, custom_score/_2/_3 (D11), copied_from (D12). Writes `data/apps/apps_YYYYMM.txt.gz` if `write=T`. |
 | `get_cc_scorecard_data(performance_window, write)` | `R/function_cc_scorecard_data.R` | data.frame: one row per user_ref_num (D9). Columns: sq_num, user_ref_num, score, segment, actduty, trans_date_ct, proc_date_ct, primemdt (TEXT, D10). Writes `data/scorecard/scorecard_YYYYMM.txt.gz` if `write=T`. |
+
+## Supabase tables
+
+Both tables exist and are seeded (50 apps, 40 scorecard rows, 2026 Q3).
+Schema: `sql/01_create_tables.sql`. Seed: `sql/02_seed_minimal.sql`.
+Setup: `R/setup_supabase.R` (idempotent, DROP + CREATE + seed).
+
+| Table | PK | Rows | Source contract |
+|---|---|---|---|
+| `applications` | `app_num` | 50 | `R/pull_apps.R:9-25` |
+| `scorecard` | `user_ref_num` (D9) | 40 | `R/function_cc_scorecard_data.R:7-15` |
 
 ## Where things live
 
@@ -35,6 +48,24 @@ once the validated marker reaches line 502.
 | Pass artifacts | `.claude/passes/<task-name>/` |
 | R script catalog | `R/CATALOG.md` |
 | Project catalog | `CATALOG.md` |
+| SQL schema + seed | `sql/` |
+
+## Serialization contract
+
+The binding contract between Postgres and R is the gzipped CSV, not the
+Postgres schema. Types that arrive in R are what `fread` infers, not what
+Postgres declares:
+
+- `user_ref_num` (VARCHAR(14)) → `integer64` (bit64). Nobody chose this;
+  fread inferred it from 14-digit values. `as.numeric()` is exact at 1e13
+  (within 2^53). The join works because `scipen = 999` in fwrite
+  (`pull_apps.R:57`, `function_cc_scorecard_data.R:42`) prevents scientific
+  notation on write — without it, "1e+13" round-trips as character and the
+  join silently breaks.
+- `dt_entered` (DATE) → `IDate` (data.table's Date subclass). Inherits from
+  Date, so `zoo::as.yearqtr()` works.
+- `prim_score` (NUMERIC) → `integer` when all values are whole numbers.
+  `is.numeric(integer)` is TRUE in R.
 
 ## Evidence discipline
 
