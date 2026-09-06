@@ -10,12 +10,14 @@ not run. Code is validated only once it has run (D5).
 
 ## Current loop position
 
-Completed: OCR cleanup of pull scripts, `supabase-credentials` (merged 2bbfe03),
-prim_score resolution (D8), scorecard grain resolution (D9).
-Current: `flatten-apps-query`.
+Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`.
+Next sequence: scrub-rmd-credentials -> simplify-rmd-psi-region ->
+create-supabase-tables -> round-trip test -> sample-data-generator ->
+fix-orchestration-rmd.
 
-Next sequence: flatten-apps-query -> create-supabase-tables -> round-trip test ->
-sample-data-generator -> fix-orchestration-rmd.
+CSI (orchestration_2.Rmd:509-634) is out of scope for this loop (D13). It is a
+third data source with its own warehouse connection and heavy OCR damage; it gets
+its own table and iteration once the validated marker reaches line 509.
 
 ## Pull function contracts
 

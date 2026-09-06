@@ -145,7 +145,7 @@ get_cc_scorecard_data <- function(performance_window, write = TRUE) {
   on.exit(DBI::dbDisconnect(conn))
 
   # -- Type contract (Postgres DDL source) ---------------------------------
-  # sq_num         INTEGER      NOT NULL   retained per D7, not grain-defining (D9)
+  # sq_num         INTEGER      NOT NULL   retained per D9, not grain-defining
   # user_ref_num   VARCHAR(14)  NOT NULL   join key → apps
   # score          NUMERIC   NULL
   # segment        TEXT      NULL       Rmd: as.character(as.numeric(segment))
