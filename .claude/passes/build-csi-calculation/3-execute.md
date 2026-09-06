@@ -77,10 +77,13 @@ No per-segment re-binning leak.
 
 ## Citation re-derivation (before → after)
 
-Source: `source('R/pull_features.R')` inserted at :78 (+1 shift), then PSI
-chunk refactored (net -72 lines: 133 removed, 61 added), CSI stub replaced
-(net +105 lines: 51 removed, 156 added). Total Rmd delta: +34 lines
-(2627 → 2661).
+Three changes with non-uniform shifts: (1) `source('R/pull_features.R')`
+inserted at :78 (+1 everywhere); (2) PSI kernel extracted to R/compute_si.R,
+-72 lines before `# QC: Completed` (133 removed, 61 added); (3) CSI chunk
+replacing the OCR stub, +106 lines after `# QC: Completed` (51 removed, 157
+added). Net: +34 lines (2627 → 2661). Citations above the marker moved DOWN
+(e.g. QC: Completed :399 → :327); citations below moved UP (e.g. QC: Validated
+:453 → :487). The shifts are not a uniform offset.
 
 | Citation | Before | After | Anchor text | Verified |
 |---|---|---|---|---|
