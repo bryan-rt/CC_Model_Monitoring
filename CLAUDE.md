@@ -4,23 +4,24 @@ Quarterly monitoring pipeline for a custom credit card application scorecard.
 Rebuilds production pipeline (DB2/Databricks) from OCR screenshots, rewired to
 Supabase (Postgres) with generic tables.
 
-Primary orchestrator: `orchestration_2.Rmd` (~2,775 lines, ~29 chunks).
-Validated frontier: line 292 (`# QC: Validated`) — but "validated" means reviewed,
-not run. Code is validated only once it has run (D5).
+Primary orchestrator: `orchestration_2.Rmd` (~2,669 lines, ~28 chunks).
+Validated frontier: line 236 (`# QC: Validated`) — VALIDATED: has run
+against live Supabase (D5). psi_df: 31 rows, segments 0-4.
+  (anchor: :236 = `# QC: Validated` marker)
 
 ## Current loop position
 
 Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`,
-`scrub-rmd-credentials`, `create-supabase-tables`.
+`scrub-rmd-credentials`, `create-supabase-tables`, `make-rmd-run-to-marker`.
 Next sequence: simplify-rmd-psi-region -> round-trip test ->
 sample-data-generator -> fix-orchestration-rmd.
 
-CSI (orchestration_2.Rmd:508-583, connection stub at :512-514) is out of scope
+CSI (orchestration_2.Rmd:452-527, connection stub at :456-458) is out of scope
 for this loop (D13). It is a third data source; D13 stub replaces original
 connection block. Gets its own table and iteration once the validated marker
-reaches line 508.
-  (anchor: :508 = CSI chunk opening fence preceding the D13 stub)
-  (anchor: :512-514 = D13 stub comment block)
+reaches line 452.
+  (anchor: :452 = CSI chunk opening fence `\`\`\`{r}` preceding the D13 stub)
+  (anchor: :456-458 = D13 stub comment block)
 
 ## Pull function contracts
 
