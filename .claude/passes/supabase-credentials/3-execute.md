@@ -183,3 +183,51 @@ plan's fallback sketch used it but the executed version hardcoded
 | `prim_score` typing | schema task |
 | Scorecard grain resolution | schema task |
 | Scrub git history of infrastructure identifiers | separate operation |
+
+---
+
+## Post-merge revalidation (2026-09-06)
+
+Commit a0d727d changed `db_connect()`'s regex (F1: `^postgresql://` →
+`^postgres(?:ql)?://`) after the live test above. That made the current main
+path reviewed but not validated (D5). Revalidating now.
+
+### TRE engine vs `(?:ql)?`
+
+`regexec` defaults to `perl = FALSE` (TRE engine). Tested both scheme variants:
+
+```
+url <- "postgres://user:pass@host:5432/dbname"
+m <- regmatches(url, regexec("^postgres(?:ql)?://...", url))[[1]]
+# → 6 elements, correct indices (user=m[2], pass=m[3], host=m[4], port=m[5], db=m[6])
+
+url2 <- "postgresql://user:pass@host:5432/dbname"
+# → 6 elements, same indices
+```
+
+TRE handles `(?:ql)?` correctly — non-capturing group does not shift indices.
+No `perl = TRUE` needed. VERIFIED.
+
+### Live connection tests (rerun against merged main)
+
+```
+--- Test 1: SELECT 1 ---
+  ok
+1  1
+
+--- Test 2: current_user, current_database ---
+  current_user current_database
+1     postgres         postgres
+
+--- Test 3: parameterized query ---
+  ok
+1  1
+
+--- Test 4: temp table create/drop ---
+CREATE TEMP TABLE: OK
+DROP TABLE: OK
+
+All connection tests passed.
+```
+
+All four tests pass on the post-merge code. `db_connect()` is now VALIDATED (D5).
