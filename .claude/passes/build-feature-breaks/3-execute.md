@@ -66,6 +66,19 @@ feature_4:  4 levels — A=0.4500, B=0.3000, C=0.1500, D=0.1000 (exact)
 feature_5:  3 levels — X=0.6000, Y=0.3000, Z=0.1000 (exact)
 ```
 
+### Flat-cohort CSI residual from feature_2 remainder
+
+feature_2's per-segment remainder stacking produces counts [3814, 3814, 3814,
+3814, 3811, 3811, 3811, 3811] against an expected uniform of 3812.5. The
+resulting CSI at alpha=0 is **1.548e-07** — not algebraically zero, but seven
+orders of magnitude below any meaningful value.
+
+Consequence for build-csi-calculation: the flat-cohort self-test must assert
+CSI < 1e-6, NOT == 0. An equality assertion fails on feature_2 for a fully
+correct pipeline. The 1e-6 threshold still catches real breakage by a wide
+margin — the smallest genuine target in the schedule is 0.01, four orders of
+magnitude above it.
+
 ### Minimum bin/level count
 
 3050 (feature_1, 30500/10). All >= 50. PASS.
