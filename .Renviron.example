@@ -1,11 +1,16 @@
-# SUPERSEDED — variable names below do NOT match ../roll_tracker.
-# roll_tracker uses SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_DB_URL.
-# Checkpoint supabase-credentials will align or justify the divergence.
-# Until then, do NOT populate .Renviron from this file.
+# Supabase session pooler connection string (port 5432, Supavisor).
+# Copy this file to .Renviron, fill in <project_ref> and <password>, restart R.
 #
-# Provisional variables (will be replaced):
-SUPABASE_HOST=
-SUPABASE_PORT=5432
-SUPABASE_DB=
-SUPABASE_USER=
-SUPABASE_PWD=
+# Format: postgresql://postgres.<project_ref>:<password>@<host>:5432/postgres
+#   (sslmode=require is enforced R-side in db_connect(); query string params are ignored)
+#
+# IMPORTANT:
+#   - The username MUST be postgres.<project_ref>, not just "postgres".
+#     The pooler uses the project ref for routing; omitting it produces
+#     "password authentication failed" even with the correct password.
+#   - The password MUST be percent-encoded if it contains @ / ? # : or
+#     other URI-special characters. Supabase-generated passwords routinely
+#     include these. An unencoded @ splits the URI authority section,
+#     producing a host-resolution error that looks nothing like an auth failure.
+#     In R: utils::URLencode("your-password", reserved = TRUE)
+SUPABASE_DB_URL=
