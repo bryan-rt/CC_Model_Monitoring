@@ -215,6 +215,9 @@ discrepancy because nothing currently consumes this column.
 schema design task** as an open question. If it is not explicitly revisited when the
 `applications` / scorecard tables are created, the unknown becomes permanently invisible.
 
+**POST-HOC RESOLUTION (D10)**: The column is actually `primemdt` — neither OCR candidate
+was correct. Resolved by user review of the original source. See `decisions.md` D10.
+
 ---
 
 ## Checkpoint: supabase-credentials (partially executed — read done, wiring deferred)

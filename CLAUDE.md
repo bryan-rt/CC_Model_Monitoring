@@ -22,18 +22,13 @@ sample-data-generator -> fix-orchestration-rmd.
 | Function | File | Returns |
 |---|---|---|
 | `get_apps_data(performance_window, write)` | `R/pull_apps.R` | data.frame: application-level, one row per APP_NUM (GROUP BY A.APP_NUM in SQL). Key columns: app_num, user_ref_num, dt_entered, client_product_cd, decision, applied, copied_from, prim_score (NUMERIC, range 100-450, D8). Writes `data/apps/apps_YYYYMM.txt.gz` if `write=T`. |
-| `get_cc_scorecard_data(performance_window, write)` | `R/function_cc_scorecard_data.R` | data.frame: one row per user_ref_num (D9). Columns: sq_num, user_ref_num, score, segment, actduty, trans_date_ct, proc_date_ct, priored1. Writes `data/scorecard/scorecard_YYYYMM.txt.gz` if `write=T`. |
-
-## Open questions
-
-- **priored1 vs primedt**: UNRESOLVED, zero uses in 2,802 lines of Rmd. See
-  `.claude/docs/decisions.md` and `.claude/passes/clean-ocr-pull-scripts/1-explore.md`.
+| `get_cc_scorecard_data(performance_window, write)` | `R/function_cc_scorecard_data.R` | data.frame: one row per user_ref_num (D9). Columns: sq_num, user_ref_num, score, segment, actduty, trans_date_ct, proc_date_ct, primemdt (TEXT, D10). Writes `data/scorecard/scorecard_YYYYMM.txt.gz` if `write=T`. |
 
 ## Where things live
 
 | What | Where |
 |---|---|
-| Decisions (D1-D9) | `.claude/docs/decisions.md` |
+| Decisions (D1-D10) | `.claude/docs/decisions.md` |
 | Pass artifacts | `.claude/passes/<task-name>/` |
 | R script catalog | `R/CATALOG.md` |
 | Project catalog | `CATALOG.md` |

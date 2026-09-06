@@ -46,7 +46,7 @@ artifacts of the warehouse schema disappear.
 
 Already nearly flat. Changes:
 - Table name `crdtplcynl_rstr.ccsrccrddaragen2` → `scorecard`
-- Column `priored1` kept (UNRESOLVED, JC4/D9 note)
+- Column renamed `priored1` → `primemdt` (D10, resolved by user)
 - `left()` and `trim()` may be removable if we store clean values in the flat
   table, but keeping them is harmless and defensive
 
@@ -77,7 +77,7 @@ Grep of `orchestration_2.Rmd` confirms:
 - `user_ref_num`: cast via `as.numeric()` at lines 183, 200, 222, etc.
 - `prim_score`: numeric comparisons at lines 188-190, 208-210, 232-234, 239, 268
 - `dt_entered`: `zoo::as.yearqtr()` at lines 194, 214
-- `priored1`/`primedt`: **zero matches** — confirms zero downstream use
+- `priored1`/`primedt`/`primemdt`: **zero matches** — confirms zero downstream use (D10: resolved to `primemdt`)
 
 ### Column map and type annotation
 
@@ -123,7 +123,7 @@ Source table: `scorecard`. Grain: one row per user_ref_num (D9).
 | 5 | actduty | actduty | TEXT | NULL | |
 | 6 | trans_date_ct | trans_date_ct | DATE | NOT NULL | Date filter column. |
 | 7 | proc_date_ct | proc_date_ct | DATE | NULL | |
-| 8 | priored1 | priored1 | DATE | NULL | UNRESOLVED (JC4). Typed DATE as best guess from name ("prior ed[ucation] date" or "prior [something] date"). Zero Rmd uses — type choice has no observable downstream effect until the column is consumed. Carried forward as UNRESOLVED. |
+| 8 | primemdt | primemdt | TEXT | NULL | D10: resolved by user review of original source. Name resolved, type deliberately deferred — zero Rmd uses, and TEXT round-trips safely through fwrite/fread regardless. |
 
 ---
 
@@ -175,13 +175,11 @@ are exact in double precision (max exact integer: 2^53 ≈ 9e15, 14 digits max
 9.99e13). Safe, but verify no leading zeros exist in sample data (leading zeros
 would be lost in numeric cast and break the join).
 
-### R4. Working copy has uncommitted `priored1` → `primemdt` change
+### R4. ~~Working copy has uncommitted `priored1` → `primemdt` change~~ RESOLVED
 
-`git diff R/function_cc_scorecard_data.R` shows an unstaged edit changing
-`priored1` to `primemdt` (line 37). This was NOT part of the housekeeping
-commit. The task brief specifies `priored1` in the contract. **Action**: the
-rewrite will use `priored1` per the contract. The unstaged change will be
-overwritten.
+User confirmed `primemdt` is correct (D10). The working-copy change is the
+user's edit. Commit it rather than overwriting it. The rewrite will use
+`primemdt` per the updated contract.
 
 ---
 
@@ -293,7 +291,7 @@ get_cc_scorecard_data <- function(performance_window, write = TRUE) {
       actduty,
       trans_date_ct,
       proc_date_ct,
-      priored1
+      primemdt
     FROM scorecard
     WHERE trans_date_ct >= '{lubridate::floor_date(performance_window[1], 'month')}'
       AND trans_date_ct <= '{lubridate::ceiling_date(performance_window[1], 'month') - 1}'
@@ -326,7 +324,7 @@ get_cc_scorecard_data <- function(performance_window, write = TRUE) {
 | CREATE TABLE DDL | create-supabase-tables task (next) |
 | Sample data with drift parameters | sample-data-generator (D6) |
 | orchestration_2.Rmd fixes (line 209 `< 100 < -1` is OCR damage) | fix-orchestration-rmd |
-| `priored1` vs `primedt` final resolution | Carried forward UNRESOLVED |
+| ~~`priored1` vs `primedt`~~ | Resolved: `primemdt` (D10) |
 | Git history scrub of infrastructure identifiers | Separate operation |
 
 ---
@@ -348,7 +346,7 @@ get_cc_scorecard_data <- function(performance_window, write = TRUE) {
 3. Rewrite `R/function_cc_scorecard_data.R`:
    - Remove `db_connect()` definition
    - Add `source(here::here("R/db.R"))`
-   - Replace table name, keep `priored1`
+   - Replace table name, use `primemdt` (D10)
    - Add full type annotation block
    - Add `on.exit(DBI::dbDisconnect(conn))`
    - Fix `performance_window = performance_window` → required arg

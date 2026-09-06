@@ -34,12 +34,12 @@ get_cc_scorecard_data <- function(performance_window = performance_window,
                    trim(actduty) as actduty,
                    trans_date_ct,
                    proc_date_ct,
-                   priored1
+                   primemdt
 
                    from crdtplcynl_rstr.ccsrccrddaragen2
-                   where trans_date_ct >= '{lubridate::floor_date(performance_window[1], \"month\")}'
-                     AND trans_date_ct <= '{lubridate::ceiling_date(performance_window[1], \"month\") - 1}'
-                     /*and trim(segment) != '*'*/
+                   where trans_date_ct >= '{lubridate::floor_date(performance_window[1], 'month')}'
+                     AND trans_date_ct <= '{lubridate::ceiling_date(performance_window[1], 'month') - 1}'
+                     /*and trim(segment) != ''*/
                    "))
 
 if(write == T){
