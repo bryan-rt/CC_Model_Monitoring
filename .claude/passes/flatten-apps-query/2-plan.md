@@ -60,26 +60,22 @@ get_apps_data <- function(performance_window, write = TRUE) {
   on.exit(DBI::dbDisconnect(conn))
 
   # -- Type contract (Postgres DDL source) ---------------------------------
-  # app_num            INTEGER   NOT NULL   grain / PK
-  # user_ref_num       TEXT      NULL       join key → scorecard (D9)
-  # dt_entered         DATE      NOT NULL   Rmd: zoo::as.yearqtr()
-  # client_product_cd  TEXT      NOT NULL
-  # strategy_version   TEXT      NULL
-  # assigned_credit_lim NUMERIC  NULL
-  # decision           TEXT      NOT NULL   'Approve'|'Decline'|'Void'|'Withdraw'|'Pending'
-  # applied            INTEGER   NOT NULL   0 or 1
-  # applid             TEXT      NULL
-  # copied_from        TEXT      NULL       Rmd: str_extract(... "(?<=FROM ) \\d+")
-  # org_paper_type     TEXT      NULL
-  # lao_credit_lmt     NUMERIC   NULL
-  # fico_score         NUMERIC   NULL
-  # bureau_used        TEXT      NULL
-  # acq                TEXT      NULL
-  # prim_score         NUMERIC   NULL       D8: score value 100-450
-  # logic              TEXT      NULL       'AUTO'|'MANUAL'|''
-  # custom_score       NUMERIC   NULL       renamed from NAVY_CUST_SCR
-  # custom_score_2     NUMERIC   NULL       renamed from NAVY_CUST_SCR_2
-  # custom_score_3     NUMERIC   NULL       renamed from NAVY_CUST_SCR_3
+  # app_num            INTEGER      NOT NULL   grain / PK
+  # user_ref_num       VARCHAR(14)  NULL       join key → scorecard (D9)
+  # dt_entered         DATE         NOT NULL   Rmd: zoo::as.yearqtr()
+  # client_product_cd  TEXT         NOT NULL
+  # strategy_version   TEXT         NULL
+  # assigned_credit_lim NUMERIC    NULL
+  # decision           TEXT         NOT NULL   'Approve'|'Decline'|'Void'|'Withdraw'|'Pending'
+  # applied            INTEGER      NOT NULL   0 or 1
+  # org_paper_type     TEXT         NULL
+  # lao_credit_lmt     NUMERIC     NULL
+  # fico_score         NUMERIC     NULL
+  # bureau_used        TEXT         NULL
+  # acq                TEXT         NULL
+  # prim_score         NUMERIC     NULL       D8: score value 100-450
+  # -- Dropped (D11): applid, logic, custom_score, custom_score_2, custom_score_3
+  # -- Dropped (D12): copied_from
 
   df <- DBI::dbGetQuery(conn, glue::glue("
     SELECT
@@ -91,18 +87,12 @@ get_apps_data <- function(performance_window, write = TRUE) {
       assigned_credit_lim,
       decision,
       applied,
-      applid,
-      copied_from,
       org_paper_type,
       lao_credit_lmt,
       fico_score,
       bureau_used,
       acq,
-      prim_score,
-      logic,
-      custom_score,
-      custom_score_2,
-      custom_score_3
+      prim_score
     FROM applications
     WHERE dt_entered >= '{floor_date(performance_window[1], 'month')}'
       AND dt_entered <= '{ceiling_date(performance_window[1], 'month') - 1}'
@@ -127,7 +117,7 @@ get_apps_data <- function(performance_window, write = TRUE) {
 ```
 
 Grounding:
-- Column list from 1-explore.md column map, rows 1-20
+- Column list from 1-explore.md column map, rows 1-20, minus D11/D12 drops (14 remain)
 - `dbGetQuery` replaces `dbSendQuery`+`dbFetch` (1-explore §4)
 - `on.exit(dbDisconnect)` prevents connection leak (1-explore §4)
 - `performance_window` required arg (1-explore §5)
@@ -155,8 +145,8 @@ get_cc_scorecard_data <- function(performance_window, write = TRUE) {
   on.exit(DBI::dbDisconnect(conn))
 
   # -- Type contract (Postgres DDL source) ---------------------------------
-  # sq_num         INTEGER   NOT NULL   retained per D7, not grain-defining (D9)
-  # user_ref_num   TEXT      NOT NULL   join key → apps
+  # sq_num         INTEGER      NOT NULL   retained per D7, not grain-defining (D9)
+  # user_ref_num   VARCHAR(14)  NOT NULL   join key → apps
   # score          NUMERIC   NULL
   # segment        TEXT      NULL       Rmd: as.character(as.numeric(segment))
   # actduty        TEXT      NULL
@@ -219,7 +209,7 @@ Update status for both files from `CLEANED` to `FLATTENED`. Add `R/db.R` entry.
 | `db_connect()` | `R/db.R` (new) | `source(here::here("R/db.R"))` in both pull files | `conn <- db_connect()` in both function bodies |
 | `source('R/pull_apps.R')` | `orchestration_2.Rmd:80` | loads function definition | `get_apps_data()` called at `:147`, `:1275`, `:1939`, `:1944` |
 | `source('R/function_cc_scorecard_data.R')` | `orchestration_2.Rmd:81` | loads function definition | `get_cc_scorecard_data()` called at `:129` |
-| apps column names (20 cols) | SELECT in `pull_apps.R` | → RPostgres data.frame → fwrite .txt.gz → fread → Rmd | Rmd consumes: `app_num`, `user_ref_num`, `dt_entered`, `prim_score`, `copied_from`, `decision`, `applied`, `client_product_cd`, `segment` (via scorecard join). Others retained per D7, zero current use. |
+| apps column names (14 cols) | SELECT in `pull_apps.R` | → RPostgres data.frame → fwrite .txt.gz → fread → Rmd | Rmd consumes: `app_num`, `user_ref_num`, `dt_entered`, `prim_score`, `decision`, `applied`, `client_product_cd`. Dropped: applid, logic, custom_score/_2/_3 (D11), copied_from (D12). |
 | scorecard column names (8 cols) | SELECT in `function_cc_scorecard_data.R` | → RPostgres data.frame → fwrite .txt.gz → fread → Rmd | Rmd joins on `user_ref_num`, reads `score`, `segment`. `primemdt` has zero Rmd uses (D10). |
 | `performance_window` | Rmd caller: `model_input_window` at `:129,:147` | positional arg | Used in glue WHERE clause and fwrite filename |
 | `here::here("R/db.R")` | `pull_apps.R`, `function_cc_scorecard_data.R` | `here` resolves from project root | Works because Rmd knits from project root, and `source('R/pull_apps.R')` at Rmd:80 runs in project root context |
@@ -232,8 +222,8 @@ Update status for both files from `CLEANED` to `FLATTENED`. Add `R/db.R` entry.
 | `get_cc_scorecard_data` signature: remove default for `performance_window` | `orchestration_2.Rmd:129` passes explicitly via `performance_window = model_input_window`. No breakage. |
 | `write = T` → `write = TRUE` | All callers pass `write = T` explicitly. `T` evaluates to `TRUE` in standard R. No behavioral change. |
 | `dbSendQuery`+`dbFetch` → `dbGetQuery` | Semantically identical — `dbGetQuery` is `dbSendQuery` + `dbFetch` + `dbClearResult`. Return value is the same data.frame. |
-| Column name `NAVY_CUST_SCR*` → `custom_score*` | Zero Rmd matches for either name (1-explore Rmd verification). No breakage. |
-| Column name `priored1` → `primemdt` | Zero Rmd matches (D10). No breakage. |
+| Columns dropped (D11): applid, logic, custom_score/_2/_3 | Zero Rmd matches for any of these names (1-explore Rmd verification). No breakage. |
+| Column dropped (D12): copied_from | **KNOWN BREAK.** `orchestration_2.Rmd:184` references `copied_from` directly. `:201-206` uses `str_extract(copied_from, ...)` for user_ref_num remapping. `:224-229` uses it in psi_df. D12 says delete the chunk at `:179-218` and strip `:224-229`. Resolved by `simplify-rmd-psi-region` task immediately following this one. |
 | New file `R/db.R` | `orchestration_2.Rmd:80-81` sources the pull files, which in turn source `db.R`. The Rmd does not source `db.R` directly. No change needed in Rmd. |
 
 ## Edge cases and how each is handled
@@ -267,6 +257,17 @@ preserves this behavior (TRUE ≡ T). Not changing it to `write = FALSE` because
 that would alter behavior for these callers. — Does not invalidate any Pass 1
 finding.
 
+**P2.** The current `pull_apps.R:157-158` pipes through `stringr::str_squish()`
+before passing to `dbFetch()`. The flat SELECT has no multi-line SQL that needs
+squishing — the glue string is clean. `str_squish()` is removed with the
+rewrite. `library(dplyr)` remains (needed for downstream pipeline); `stringr`
+was only used for this one call and is no longer imported.
+
+**P3.** D11/D12 contract change: 20 → 14 columns. Drops applid, logic,
+custom_score/_2/_3 (D11) and copied_from (D12). copied_from has active Rmd
+consumers at `:184,:201-206,:224-229` — this is a **known break**, resolved
+by the simplify-rmd-psi-region task immediately following.
+
 ## Unresolved
 
 None. All open questions from Pass 1 are resolved:
@@ -280,7 +281,7 @@ None. All open questions from Pass 1 are resolved:
 - [ ] Both files `source()` cleanly: `Rscript -e "source('R/pull_apps.R')"`
 - [ ] Every alias in the contract present and unchanged — diff the alias list
       from the SELECT against CLAUDE.md, paste the comparison
-- [ ] Type annotation block above each SELECT, complete (20 apps, 8 scorecard)
+- [ ] Type annotation block above each SELECT, complete (14 apps, 8 scorecard)
 - [ ] No DB2-only syntax remains: `grep -E 'DECODE|CHAR\(' R/*.R` returns
       zero matches
 - [ ] No `db_connect()` duplication: function exists only in `R/db.R`
