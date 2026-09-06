@@ -1,0 +1,72 @@
+2026-09-05 21:10:18,732 [INFO] ======================================================================
+2026-09-05 21:10:18,732 [INFO] Image-to-R Script Pipeline
+2026-09-05 21:10:18,732 [INFO]   Image dir:   /Users/bryanthomas/Desktop/Professional/Projects/CC_Model_Monitoring/input_files/init_images/function_cc_scorecard_data
+2026-09-05 21:10:18,732 [INFO]   Output file: /Users/bryanthomas/Desktop/Professional/Projects/CC_Model_Monitoring/R/function_cc_scorecard_data.R
+2026-09-05 21:10:18,732 [INFO] ======================================================================
+2026-09-05 21:10:18,773 [INFO] API client initialized
+2026-09-05 21:10:18,774 [INFO] Found 3 images in /Users/bryanthomas/Desktop/Professional/Projects/CC_Model_Monitoring/input_files/init_images/function_cc_scorecard_data, sorted by creation time
+2026-09-05 21:10:18,774 [INFO] 
+────────────────────────────────────────────────────────────
+2026-09-05 21:10:18,774 [INFO] Processing image 1/3: c67ef1dc-c8b6-4ff4-8244-73dbd091f244.jpg.jpeg
+2026-09-05 21:10:18,774 [INFO] ────────────────────────────────────────────────────────────
+2026-09-05 21:10:18,774 [INFO]   [1/2] Running Tesseract on c67ef1dc-c8b6-4ff4-8244-73dbd091f244.jpg.jpeg...
+2026-09-05 21:10:19,010 [INFO]   [1/2] Tesseract extracted 6 lines
+2026-09-05 21:10:19,010 [INFO]   [2/2] Sending to Claude (attempt 1)...
+2026-09-05 21:10:29,010 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-09-05 21:10:29,026 [INFO]   [2/2] Claude returned 31 lines
+2026-09-05 21:10:29,026 [INFO]   Parsed 31 lines (range: 1-31)
+2026-09-05 21:10:29,026 [INFO]   Total accumulated lines: 31
+2026-09-05 21:10:29,026 [INFO] 
+────────────────────────────────────────────────────────────
+2026-09-05 21:10:29,027 [INFO] Processing image 2/3: dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg
+2026-09-05 21:10:29,027 [INFO] ────────────────────────────────────────────────────────────
+2026-09-05 21:10:29,027 [INFO]   [1/2] Running Tesseract on dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg...
+2026-09-05 21:10:29,171 [INFO]   [1/2] Tesseract extracted 1 lines
+2026-09-05 21:10:29,171 [INFO]   [2/2] Sending to Claude (attempt 1)...
+2026-09-05 21:10:37,537 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-09-05 21:10:37,541 [INFO]   [2/2] Claude returned 30 lines
+2026-09-05 21:10:37,541 [INFO]   Parsed 30 lines (range: 30-59)
+2026-09-05 21:10:37,542 [INFO]   Overlap detected: lines 30-31
+2026-09-05 21:10:37,542 [WARNING]   Discrepancy at line 31 — keeping curr image version
+2026-09-05 21:10:37,542 [INFO]   Total accumulated lines: 59
+2026-09-05 21:10:37,542 [INFO] 
+────────────────────────────────────────────────────────────
+2026-09-05 21:10:37,542 [INFO] Processing image 3/3: e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg
+2026-09-05 21:10:37,542 [INFO] ────────────────────────────────────────────────────────────
+2026-09-05 21:10:37,542 [INFO]   [1/2] Running Tesseract on e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg...
+2026-09-05 21:10:37,646 [INFO]   [1/2] Tesseract extracted 0 lines
+2026-09-05 21:10:37,646 [INFO]   [2/2] Sending to Claude (attempt 1)...
+2026-09-05 21:10:44,705 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-09-05 21:10:44,708 [INFO]   [2/2] Claude returned 34 lines
+2026-09-05 21:10:44,708 [INFO]   Parsed 34 lines (range: 32-65)
+2026-09-05 21:10:44,708 [INFO]   Overlap detected: lines 32-59
+2026-09-05 21:10:44,708 [WARNING]   Discrepancy at line 32 — keeping curr image version
+2026-09-05 21:10:44,708 [WARNING]   Discrepancy at line 40 — keeping curr image version
+2026-09-05 21:10:44,708 [WARNING]   Discrepancy at line 43 — keeping curr image version
+2026-09-05 21:10:44,708 [WARNING]   Discrepancy at line 45 — keeping curr image version
+2026-09-05 21:10:44,709 [WARNING]   Discrepancy at line 46 — keeping curr image version
+2026-09-05 21:10:44,709 [WARNING]   Discrepancy at line 47 — keeping curr image version
+2026-09-05 21:10:44,709 [WARNING]   Discrepancy at line 48 — keeping curr image version
+2026-09-05 21:10:44,709 [WARNING]   Discrepancy at line 49 — keeping curr image version
+2026-09-05 21:10:44,709 [WARNING]   Discrepancy at line 53 — keeping curr image version
+2026-09-05 21:10:44,709 [WARNING]   Discrepancy at line 57 — keeping curr image version
+2026-09-05 21:10:44,709 [WARNING]   Discrepancy at line 59 — keeping curr image version
+2026-09-05 21:10:44,709 [INFO]   Total accumulated lines: 65
+2026-09-05 21:10:44,710 [INFO] 
+======================================================================
+2026-09-05 21:10:44,710 [INFO] Post-processing
+2026-09-05 21:10:44,710 [INFO] ======================================================================
+2026-09-05 21:10:44,710 [INFO] Total lines in final output: 65
+2026-09-05 21:10:44,710 [INFO] Chunk boundary validation: skipped (R script output)
+2026-09-05 21:10:44,710 [INFO] Output written to: /Users/bryanthomas/Desktop/Professional/Projects/CC_Model_Monitoring/R/function_cc_scorecard_data.R
+2026-09-05 21:10:44,712 [WARNING] 12 discrepancies logged to: /Users/bryanthomas/Desktop/Professional/Projects/CC_Model_Monitoring/scripts/discrepancies.log
+2026-09-05 21:10:44,712 [INFO] 
+======================================================================
+2026-09-05 21:10:44,712 [INFO] Pipeline Summary
+2026-09-05 21:10:44,712 [INFO] ======================================================================
+2026-09-05 21:10:44,712 [INFO]   Images processed: 3/3
+2026-09-05 21:10:44,712 [INFO]   Images skipped:   0
+2026-09-05 21:10:44,712 [INFO]   Total lines:      65
+2026-09-05 21:10:44,712 [INFO]   Discrepancies:    12
+2026-09-05 21:10:44,712 [INFO]   Chunk warnings:   0
+2026-09-05 21:10:44,712 [INFO]   Output file:      /Users/bryanthomas/Desktop/Professional/Projects/CC_Model_Monitoring/R/function_cc_scorecard_data.R

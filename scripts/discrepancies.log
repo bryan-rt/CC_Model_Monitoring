@@ -1,0 +1,63 @@
+Discrepancy Report — 2026-09-05T21:10:44.710960
+============================================================
+
+DISCREPANCY at line 31 (between c67ef1dc-c8b6-4ff4-8244-73dbd091f244.jpg.jpeg and dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg):
+  Version A (prev img): '@ get_cc_scorecard_data(performance_window, write) 2'
+  Version B (curr img): 'df <- odbc::dbGetQuery(conn = edl_conn,'
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 32 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): "                       statement = glue::glue('"
+  Version B (curr img): ''
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 40 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): '                            trim(actduty) as actduty,'
+  Version B (curr img): '                   trim(actdtu) as actduty,'
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 43 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): '                            primedt'
+  Version B (curr img): '                   priored1'
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 45 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): '                       from crdtplcy_rstr.ctrscrcdatagon2'
+  Version B (curr img): '                   from crdtplcynl_rstr.ccsrccrddaragen2'
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 46 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): '                       where trans_date_ct >= "{lubridate::floor_date(performance_window[1], "month")}"'
+  Version B (curr img): '                   where trans_date_ct >= \'{lubridate::floor_date(performance_window[1], "month")}\''
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 47 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): '                         AND trans_date_ct <= "{lubridate::ceiling_date(performance_window[2], "month") - 1}"'
+  Version B (curr img): '                     AND trans_date_ct <= \'{lubridate::ceiling_date(performance_window[2], "month") - 1}\''
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 48 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): '                         /and trim(segment) != "**/'
+  Version B (curr img): "                     /*and trim(segment) != '*'/"
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 49 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): "                       '))"
+  Version B (curr img): '                   "))'
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 53 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): '             file = glue::glue(here::here("Data/Scorecard/scorecard_{format(as.Date(min(performance_window)),"[UNCLEAR]").txt.gz")),'
+  Version B (curr img): '             file = glue::glue(here::here("Data/Scorecard/scorecard_{format(as.Date(min(performance_window)), \'%Y%m\')}.txt.gz")),'
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 57 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): '             nline = 999,'
+  Version B (curr img): '             nclpen = 999,'
+  KEPT: Version B (curr img — line appears near top)
+
+DISCREPANCY at line 59 (between dfd98161-ab64-42e3-a3da-951bf52540ea.jpg.jpeg and e10072b1-a15b-42d2-b57f-1186aa6d40e0.jpg.jpeg):
+  Version A (prev img): '~57—'
+  Version B (curr img): ''
+  KEPT: Version B (curr img — line appears near top)
+

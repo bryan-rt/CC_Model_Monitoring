@@ -1,0 +1,35 @@
+secrets/
+*.pyc
+__pycache__/
+.env
+.venv/
+input_files/
+.Rproj.user/
+.DS_Store
+
+# R
+.Rhistory
+.Rdata
+.httr-oauth
+.DS_Store
+
+# renv
+renv/library/
+renv/local/
+renv/cellar/
+renv/lock/
+renv/python/
+renv/staging/
+
+# Data
+data/*.csv
+data/*.rds
+data/*.xlsx
+
+# Output
+output_files/
+reports/*.html
+reports/*.pdf
+
+# Environment
+.Renviron

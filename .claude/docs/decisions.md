@@ -1,0 +1,14 @@
+# Decisions Log
+
+Decisions that shape later work. Not a changelog — only things that would be expensive to
+reverse or that a future session might otherwise re-litigate.
+
+| ID | Date | Decision | Status | Rationale | Affects |
+|---|---|---|---|---|---|
+| D1 | 2026-09-05 | Genericize Supabase source-side names; preserve the return contract the Rmd expects | Decided | Interview demo doesn't need real internal table/column names, but downstream code depends on the column names the pull functions return | `R/pull_apps.R`, `R/function_cc_scorecard_data.R`, Supabase table design |
+| D2 | 2026-09-05 | Postgres via Supabase replaces DB2/Oracle warehouse; `DECODE` → `CASE`, etc. | Decided | No access to production databases outside work environment | `R/pull_apps.R`, `R/function_cc_scorecard_data.R`, all sourced scripts |
+| D3 | 2026-09-05 | Environment credentials move from `keyring` to `.Renviron` via `Sys.getenv()` | Decided | Supabase uses URL + API key, not enterprise keyring; simpler for demo | `R/pull_apps.R`, `R/function_cc_scorecard_data.R`, `.Renviron` |
+| D4 | 2026-09-05 | Three-pass gated workflow with user approval at each boundary | Decided | Prevents compounding errors from OCR transcription and context loss across sessions | `.claude/skills/`, all task execution |
+| D5 | 2026-09-05 | Reviewed ≠ validated: code is validated only once it has run | Decided | Two errors survived past the QC marker because they were syntactically plausible | `orchestration_2.Rmd` QC marker, Pass 3 rule 3 |
+| D6 | 2026-09-05 | Sample data generator takes drift parameters so metrics can be shown responding | Decided | PSI/CSI/KS need visible movement to demonstrate the monitoring pipeline works | Future data generation scripts, Supabase seed data |
+| D7 | 2026-09-05 | Supabase apps source is a SINGLE FLAT TABLE; five joined warehouse tables (ADM_APP_INFO, ADM_GEN_VAL, ADM_DATA_ELEM, ADM_TS2_EXTR_OVR, ADM_APP_LOG) collapse to one `applications` table. No EAV, no pivot, no subqueries. `get_apps_data()` becomes a single SELECT with column aliases and a date filter. Scorecard already flat. Preserve the full output column list, including columns with zero current uses in the Rmd. | Decided | Warehouse schema complexity is an artifact of the source system, not a requirement of the monitoring pipeline. Flat table is simpler to seed, query, and maintain for demo purposes. Unused columns are retained because the Rmd regions that would consume them (lines 304-508) carry the heaviest OCR damage — "unused" there means "unreadable", not "absent". Adding a column later is trivial; discovering a missing one while rehearsing is not. Acknowledged cost: going flat gives up the DECODE -> MAX(CASE WHEN) dialect conversion as a live walkthrough example; it survives only in the reconstruction diff. | `R/pull_apps.R`, `R/function_cc_scorecard_data.R`, Supabase table design, schema task |

@@ -1,0 +1,11 @@
+# SUPERSEDED — variable names below do NOT match ../roll_tracker.
+# roll_tracker uses SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_DB_URL.
+# Checkpoint supabase-credentials will align or justify the divergence.
+# Until then, do NOT populate .Renviron from this file.
+#
+# Provisional variables (will be replaced):
+SUPABASE_HOST=
+SUPABASE_PORT=5432
+SUPABASE_DB=
+SUPABASE_USER=
+SUPABASE_PWD=
