@@ -5,7 +5,8 @@ validated frontier (line 292). The remaining 8 scripts are sourced but not invok
 
 | File | Status | Purpose | Key functions | Read by |
 |---|---|---|---|---|
-| `db.R` | FLATTENED | Shared `db_connect()` helper | `db_connect()` | Sourced by `pull_apps.R`, `function_cc_scorecard_data.R` |
+| `db.R` | FLATTENED | Shared `db_connect()` helper | `db_connect()` | Sourced by `pull_apps.R`, `function_cc_scorecard_data.R`, `setup_supabase.R` |
+| `setup_supabase.R` | CREATED | Idempotent table setup (DROP + CREATE + seed) | `setup_supabase()` | Manual setup |
 | `pull_apps.R` | FLATTENED | Pull application data (14 cols from flat `applications` table) | `get_apps_data()` | `orchestration_2.Rmd:139` |
 | `function_cc_scorecard_data.R` | FLATTENED | Pull scorecard data (8 cols from flat `scorecard` table) | `get_cc_scorecard_data()` | `orchestration_2.Rmd:121` |
 | `pull_trended_data.R` | — | Not yet transcribed | — | Sourced at `orchestration_2.Rmd:74` |
