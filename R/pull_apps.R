@@ -2,13 +2,15 @@ library(dplyr)
 library(lubridate)
 
 db_connect <- function() {
+  url <- Sys.getenv("SUPABASE_DB_URL")
+  m <- regmatches(url, regexec("^postgresql://([^:]+):([^@]+)@([^:]+):(\\d+)/([^?]+)", url))[[1]]
   DBI::dbConnect(
     RPostgres::Postgres(),
-    host     = Sys.getenv("SUPABASE_HOST"),
-    port     = as.integer(Sys.getenv("SUPABASE_PORT", "5432")),
-    dbname   = Sys.getenv("SUPABASE_DB"),
-    user     = Sys.getenv("SUPABASE_USER"),
-    password = Sys.getenv("SUPABASE_PWD"),
+    host     = m[4],
+    port     = as.integer(m[5]),
+    dbname   = m[6],
+    user     = m[2],
+    password = utils::URLdecode(m[3]),
     sslmode  = "require"
   )
 }
@@ -53,7 +55,7 @@ FROM
   MAX(B.NAVY_CUST_SCR) AS NAVY_CUST_SCR,
 
   /* OCR RECONSTRUCTION — logic CASE
-     Source text (pre-edit pull_apps.R:52-60 @ b59d6c8): structurally merged, unbalanced parens
+     Source text (pre-edit pull_apps.R:52-60, pre-OCR-cleanup): structurally merged, unbalanced parens
      Reading A (applied): 3-branch AUTO/MANUAL/'' based on officer presence
        - OR->AND change in MANUAL branch (see 1-explore.md JC1 disclosure)
      Reading B (discarded): literal OCR with missing WHEN keyword at pre-edit line 58
@@ -113,7 +115,7 @@ FROM
   AND A2.ELEMENT_NAME IN ('COPIED_FROM','NAVY CUSTOM SCORE 2','NAVY CUSTOM SCORE','RETURN DATE','CBA REF NUMBER')
   /* NOTE: 'NAVY CUSTOM SCORE 3' intentionally absent from IN list.
      Also: underscore vs space mismatch between DECODEs (pre-edit lines 79-83
-     @ b59d6c8, now lines 87-92) and this IN list would null all three score
+     pre-OCR-cleanup, now lines 87-92) and this IN list would null all three score
      columns if read literally — see 1-explore.md JC3 */
   GROUP BY A2.APP_NUM) B ON A.APP_NUM = B.APP_NUM
 
