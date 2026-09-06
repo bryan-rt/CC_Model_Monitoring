@@ -72,8 +72,6 @@ stopifnot(all(unlist(ks_methods %in% c('live', 'fixed', 'true'))))
 source('R/pull_apps.R')
 source('R/function_cc_scorecard_data.R')
 # PENDING TRANSCRIPTION — not yet OCR'd, not needed before the QC marker
-
-fs::dir_create('data/performance_24')
 ```
 
 ## 4) Folder Init
@@ -84,7 +82,7 @@ This section checks for required directories and creates them if missing. Run on
 
 ```{r, echo=FALSE}
 #------------------------------- Folder Structure ---------------------------------
-fs::dir_create(c('data', 'data/dq_24_mos', 'data/ks_driver_w_perf', 'data/performance_24'))
+fs::dir_create(c('data', 'data/apps', 'data/scorecard', 'data/dq_24_mos', 'data/ks_driver_w_perf', 'data/performance_24'))
 fs::dir_create(c('output_files', 'output_files/quarterly_stats'))
 ```
 # Quarterly Report
@@ -233,7 +231,7 @@ psi_raw_data <- psi |>
 psi_raw_data
 ```
 
-# QC: Validated
+# QC: Completed
 
 We use the following chunk to reference the segment_breaks object to define the psi buckets, and join development data population counts per bin with the pulled current cohort. Development population counts per segment per bin are loaded from a static file. 
 
@@ -443,7 +441,8 @@ Population_Stability_Index = max( Population_Divergence_(D-A) * (x[b/A] ))
 psi_summary
 ```
 
-# QC: Target
+
+# QC: Validated
 
 #CSI
 
@@ -496,6 +495,8 @@ We will need to build out another supabase table for the CSI pull to query again
 # and end_date_dt <= "end_dt")')
 
 ```
+ 
+# QC: Target 
  
 load static xlsx file with a unique tab per scorecard segment (all segments, 0, 1, 2, 3, 4). These tables should be aggregates of each scorecard segment grouped by each feature_n column broken into quantiles with the counts of user_ref_num per quantile and a column for distribution of the development population per bin. This allows for a similar calculation to PSI, but for each feature - thus the characteristic stability index value. 
 
