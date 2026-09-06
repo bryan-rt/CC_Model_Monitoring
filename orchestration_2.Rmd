@@ -62,7 +62,7 @@ library(data.table)
 
 set.seed(42)
 options(scipen = 999)
-cohort_date <- as.Date(glue('{lubridate::floor_date(Sys.Date(),"quarter")}')) # Is lubridate::floor_date('quarter')
+cohort_date <- lubridate::floor_date(Sys.Date(), "quarter")
 backfilling_date <- cohort_date %m-% months(6)
 
 # Gates which R methodologies can/cannot, wired into logic starting [checkpoint 5
@@ -71,18 +71,9 @@ stopifnot(all(unlist(ks_methods %in% c('live', 'fixed', 'true'))))
 
 source('R/pull_apps.R')
 source('R/function_cc_scorecard_data.R')
-source('R/pull_trended_data.R')
-source('R/pull_early_trended_data.R')
-source('R/function_join_apps_perf.R')
-source('R/pull_score_mapping.R')
-source(here::here('R/calculate_early_ks.R'))
-source(here::here('R/calculate_true_bad_ks.R'))
-source(here::here('R/build_ks_report_tables.R'))
-source(here::here('R/build_ks_rank_order.R'))
+# PENDING TRANSCRIPTION — not yet OCR'd, not needed before the QC marker
 
 fs::dir_create('data/performance_24')
-apps_path <- fs::dir_ls('data/apps')
-perf_paths <- fs::dir_ls('data/performance_24/')
 ```
 
 ## 4) Folder Init
@@ -108,13 +99,13 @@ The chunk below pulls the most recent Starters application and scorecard data fr
 
 ```{r}
 
-paths <- fs::dir_ls('data/scorecard')[!which(basename(fs::dir_ls('data/scorecard')) %in% c(
+paths <- fs::dir_ls('data/scorecard')[which(basename(fs::dir_ls('data/scorecard')) %in% c(
   glue::glue('scorecard_{format(as.Date(cohort_date), "%Y%m")}.txt.gz'),
   glue::glue('scorecard_{format(as.Date(cohort_date) %m+% months(1), "%Y%m")}.txt.gz'),
   glue::glue('scorecard_{format(as.Date(cohort_date) %m+% months(2), "%Y%m")}.txt.gz')))]
 
 if(length(paths) != 3){
-  scorecard <- purrr::map_dfr(seq(cohort_date, cohort_date %m-% months(2), 'month'),
+  scorecard <- purrr::map_dfr(seq(cohort_date, cohort_date %m+% months(2), 'month'),
                               .progress = TRUE,
                               function(model_input_window){
 
@@ -126,13 +117,13 @@ if(length(paths) != 3){
 
 
 paths <- fs::dir_ls('data/apps/')[which(basename(fs::dir_ls('data/apps/')) %in% c(
-  glue::glue('(apps_{format(as.Date(cohort_date), "%Y%m")}.txt.gz'),
-  glue::glue('(apps_{format(as.Date(cohort_date) %m+% months(1), "%Y%m")}.txt.gz'),
-  glue::glue('(apps_{format(as.Date(cohort_date) %m+% months(2), "%Y%m")}.txt.gz')
+  glue::glue('apps_{format(as.Date(cohort_date), "%Y%m")}.txt.gz'),
+  glue::glue('apps_{format(as.Date(cohort_date) %m+% months(1), "%Y%m")}.txt.gz'),
+  glue::glue('apps_{format(as.Date(cohort_date) %m+% months(2), "%Y%m")}.txt.gz')
 ))]
 
 if(length(paths) != 3){
-  apps <- purrr::map_dfr(seq(cohort_date, cohort_date %m-% months(2), 'month'),
+  apps <- purrr::map_dfr(seq(cohort_date, cohort_date %m+% months(2), 'month'),
                               .progress = TRUE,
                               function(model_input_window){
 
@@ -153,14 +144,14 @@ number_of_month_window <- 3
 scorecard <- purrr::map_df(c(1:number_of_month_window),
                 function(i) {
                   
-                  df <- data.table::fread(glue::glue('data/scorecard/scorecard_{format(cohort_date %m+ months(i - 1), "%Y%m")}.txt.gz'))
+                  df <- data.table::fread(glue::glue('data/scorecard/scorecard_{format(cohort_date %m+% months(i - 1), "%Y%m")}.txt.gz'))
                   
                   })
 
 apps <- purrr::map_df(seq(number_of_month_window),
                 function(i) {
                   
-                  df <- data.table::fread(glue::glue('data/apps/apps_{format(cohort_date %m+ months(i - 1), "%Y%m")}.txt.gz'))
+                  df <- data.table::fread(glue::glue('data/apps/apps_{format(cohort_date %m+% months(i - 1), "%Y%m")}.txt.gz'))
                   
                   })
 
@@ -169,60 +160,13 @@ names(scorecard) <- names(scorecard) |> tolower()
 ```
 
 ```{r}
-apps |>
-  filter(!client_product_cd %in% c('SEC','MSC')) |>
-  mutate(
-    user_ref_num = as.numeric(user_ref_num),
-    copied_flag = case_when(is.na(copied_from) ~ 1,
-                             T ~ 0)
-    ) |>
-  left_join(scorecard |> mutate(user_ref_num = as.numeric(user_ref_num))) |>
-  group_by(has_score = case_when(is.na(prim_score) ~ 0,
-                                 prim_score < 100 ~ -1,
-                                 prim_score > 450 ~ 9999,
-                              T ~ 1),
-           has_segment = case_when(is.na(segment) ~ 0,
-                                   T ~ 1),
-           data = zoo::as.yearqtr(dt_entered)) |>
-      summarize(dt_counts_pre = n_distinct(app_num)) |>
-left_join(
-  apps |>
-  filter(!client_product_cd %in% c('SEC','MSC')) |>
-  mutate(
-    user_ref_num = as.numeric(user_ref_num),
-    from_value = as.numeric(substr(stringr::str_extract(copied_from, "(?<=FROM ) \\d+"),1,14)),
-    to_value = as.numeric(substr(stringr::str_extract(copied_from,"(?<=TO ) \\d+"),1,14)),
-    copied_flag = case_when(is.na(copied_from) ~ 1,
-                             T ~ 0),
-    user_ref_num = case_when(is.na(from_value) ~ user_ref_num,
-                             T ~ from_value)) |>
-    left_join(scorecard |> mutate(user_ref_num = as.numeric(user_ref_num))) |>
-  group_by(has_score = case_when(is.na(prim_score) ~ 0,
-                                 prim_score < 100 < -1,
-                                 prim_score > 450 ~ 9999,
-                              T ~ 1),
-           has_segment = case_when(is.na(segment) ~ 0,
-                                   T ~ 1),
-           data = zoo::as.yearqtr(dt_entered)) |> 
-    summarise(app_counts_post = n_distinct(app_num))
-  )
-
-```
-
-```{r}
  psi_df <- apps |> 
   mutate(app_num = as.numeric(app_num),
-         user_ref_num = as.numeric(user_ref_num),
-         from_value = as.numeric(substr(stringr::str_extract(copied_from, "(?<=FROM ) \\d+"),1,14)),
-    to_value = as.numeric(substr(stringr::str_extract(copied_from,"(?<=TO ) \\d+"),1,14)),
-    copied_flag = case_when(is.na(copied_from) ~ 1,
-                             T ~ 0),
-    user_ref_num = case_when(is.na(from_value) ~ user_ref_num,
-                             T ~ from_value)) |>
+         user_ref_num = as.numeric(user_ref_num)) |>
     left_join(scorecard |>
                 mutate(user_ref_num = as.numeric(user_ref_num))) |>
   mutate(has_score = case_when(is.na(prim_score) ~ 0,
-                                 prim_score < 100 < -1,
+                                 prim_score < 100 ~ -1,
                                  prim_score > 450 ~ 9999,
                               T ~ 1),
            has_segment = case_when(is.na(segment) ~ 0,
@@ -295,7 +239,7 @@ We use the following chunk to reference the segment_breaks object to define the 
 
 Join ranges_refit with psi_raw_data on scorecard, lower range, upper range then calculate pis_data by taking the grouping by scorecard, determining the percent of total each bin is for the development population in percent_dev column and doing the same for percent_current, mutating the df to have the difference between the distributions at each bin, creating the proportion column  (percent_current / percent_dev), the log of proportion column, and finaly the population divergence column which should be the difference between the distributions * the log of the proportions. These are split into a list of tibbles per scorecard segment, so 6 tibbles including the All Segments. finally, write the list of tibbles with each scorecards psi to a cache xlsx file with a distinct tab per tibble. This should reflect the standard PSI calculation used by industry.
  
-```{r}                                                                                                    
+```{r}
 
 albefile <- 'Output/Quarterly_Q2_1/loan_and_cd_event_DEFAULT.xlsx'
 
@@ -503,7 +447,7 @@ psi_summary
 
 #CSI
 
-Features used to feed the system view model are pulled each quarter here. We load in the development population features used and the value stability index measurements so we can compare the distributions againstcurrent calculations.
+We will need to build out another supabase table for the CSI pull to query against. We can build this to have user_ref_num as the join key and then 5 feature columns labeled feature_n. The query could be modularized into an R script similar to R/pull_apps.R and should be structured similarly. After the pull, we want to aggregate the data into tables similarly to how psi is aggregated into vigintiles. These tables should be aggregates of each scorecard segment grouped by each feature_n column broken into quantiles with the counts of user_ref_num per quantile and a column for distribution of the current cohort population per bin. This allows for a similar calculation to PSI, but for each feature - thus the characteristic stability index value. 
 
 ```{r}
 # model input window(B)
@@ -551,57 +495,9 @@ Features used to feed the system view model are pulled each quarter here. We loa
 # [UNCLEAR][UNCLEAR]_data_it <- [UNCLEAR][UNCLEAR]
 # and end_date_dt <= "end_dt")')
 
-csl_month_ranges <- list()
-list(
-start = cohort_date,
-end = lubridate::ceiling_date(cohort_date, "month") - 1
-)
-list(
-start = lubridate::floor_date(cohort_date %m+% months(1), "month"),
-end = lubridate::ceiling_date(cohort_date %m+% months(1), "month") - 1
-)
-list(
-start = lubridate::floor_date(cohort_date %m+% months(2), "month"),
-end = lubridate::ceiling_date(cohort_date %m+% months(2), "month") - 1
-)
-
-csl_raw_data <- dplyr::bind_rows(
-lapply(csl_month_ranges, function(x) fetch_csl_month(all_conn, x$start, x$end))
-)
-
-if (csl_raw_data = csl_raw_data ){
-cohort_date: filter(cohort_date_dt == as.Date('2023-05-08'))
-
-csl_raw_data <- csl_raw_data %>%
-  dplyr::lazy_df() %>%
-  mutate(csl_net_sum = as.numeric(csl_net_sum) %>% substr(1,14)) %>%
-  inner_join(
-    ref_sum,
-    by = c(csl_collection_ref_sum = col_names(ref_sum)) ) %>%
-          select(csl_net_sum) )
-)
-}
-}
-
-wp <- openxlsx::loadWorkbook("RefAll/QueryParts/MGT_CSL/CSL and Characteristic report.xlsx")
-
-openxlsx::ws_xlsxsheet (ws, "Characteristic Data", w = ref_raw_data,
-#           startCol = 0, startRow = 1,
-#           colNames = T, [UNCLEAR] = 1
-)
-
-# # Save the workbook, overwriting the existing file
-openxlsx::saveWorkbook(wp,
-      glue::glue("C:/[UNCLEAR]/[UNCLEAR]/MGT_CSL CSL CSL_[UNCLEAR]{csl_month_start_date}.xlsx"),
-                overwrite = TRUE)
-
-# inside the workbook, highlight rows were divergence is above 0.1 with in each PGI [UNCLEAR] row.
-
-# inside the workbook, highlight rows were divergence is outside -0.05 and 0.25 within each CSL scorecard
-
-# in bold
-
 ```
+ 
+load static xlsx file with a unique tab per scorecard segment (all segments, 0, 1, 2, 3, 4). These tables should be aggregates of each scorecard segment grouped by each feature_n column broken into quantiles with the counts of user_ref_num per quantile and a column for distribution of the development population per bin. This allows for a similar calculation to PSI, but for each feature - thus the characteristic stability index value. 
 
 ```{r, echo=FALSE}
 align_quarter_ref_data <- lubridate::floor_date(as.Date("2023-10-3") ) +
