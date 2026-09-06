@@ -27,10 +27,21 @@ has_segment distribution:
 31
 ```
 
-- 31 rows after filtering (50 apps → remove 5 SEC/MSC, 5 NULL prim_score,
-  6 NULL segment, 3 prim_score < 100 → 31 remaining; exact count depends on
-  overlap of filter conditions).
-- All 5 segments (0-4) represented with varying volumes.
+Filter waterfall (verified stage by stage):
+
+```
+Stage 0 (after join + mutate): 50
+Stage 1 (after SEC/MSC filter): 45   (-5: 3 SEC + 2 MSC)
+Stage 2 (after !is.na(prim_score)):  41   (-4: NULL prim_score among non-SEC/MSC)
+Stage 3 (after has_segment == 1):    31   (-10: NULL segment from unmatched joins + NULL-segment matches)
+Stage 4 (after prim_score >= 100):   31   (-0: all surviving scores >= 100)
+```
+
+The filter conditions overlap: some SEC/MSC rows also have NULL segment (from
+unmatched joins), so the stage drops are smaller than summing each condition's
+count independently would suggest.
+
+- All 5 segments (0-4) represented: 0=4, 1=10, 2=6, 3=7, 4=4.
 - has_score = 1 for all rows (no < 100 or > 450 survived the filter).
 - has_segment = 1 for all rows (filter requires has_segment == 1).
 
@@ -82,6 +93,13 @@ psi_raw_data nrow: 39
 38 All Segments      3         117         134
 39 All Segments      3         100         117
 ```
+
+**Sparsity note:** 39 non-empty bins from a 120-bin grid (20 vigintiles x 6
+groups) with only 31 applications. Most bins hold 1 row or none. PSI is not
+computing anything meaningful at this seed size — the distributions are too
+sparse for divergence measures to be interpretable. This is expected and is
+what the sample-data generator task (D6) exists to fix. These numbers confirm
+the pipeline runs, not that the metric is valid.
 
 ## Full render output
 
