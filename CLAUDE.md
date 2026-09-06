@@ -19,8 +19,8 @@ the setup chunk to select a different quarter.
 
 Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`,
 `scrub-rmd-credentials`, `create-supabase-tables`, `make-rmd-run-to-marker`,
-`build-psi-calculation`, `sample-data-generator`.
-Next sequence: round-trip test -> fix-orchestration-rmd.
+`build-psi-calculation`, `sample-data-generator`, `create-features-table`.
+Next sequence: build-feature-breaks -> build-csi-calculation -> round-trip test -> fix-orchestration-rmd.
 
 CSI (orchestration_2.Rmd:401-450, connection stub at :409-411) is now inside
 the validated frontier. It is a third data source; D13 stub replaces original
@@ -34,26 +34,28 @@ connection block. Gets its own table and iteration.
 |---|---|---|
 | `get_apps_data(performance_window, write)` | `R/pull_apps.R` | data.frame: application-level, one row per app_num. 14 columns: app_num, user_ref_num, dt_entered, client_product_cd, strategy_version, assigned_credit_lim, decision, applied, org_paper_type, lao_credit_lmt, fico_score, bureau_used, acq, prim_score (NUMERIC, D8). Dropped: applid, logic, custom_score/_2/_3 (D11), copied_from (D12). Writes `data/apps/apps_YYYYMM.txt.gz` if `write=T`. |
 | `get_cc_scorecard_data(performance_window, write)` | `R/function_cc_scorecard_data.R` | data.frame: one row per user_ref_num (D9). Columns: sq_num, user_ref_num, score, segment, actduty, trans_date_ct, proc_date_ct, primemdt (TEXT, D10). Writes `data/scorecard/scorecard_YYYYMM.txt.gz` if `write=T`. |
-| `generate_cohort(quarters, seed)` | `R/generate_cohort.R` | list: `$apps` (data.frame, ~141k rows), `$scorecard` (data.frame, ~137k rows), `$meta` (per-quarter stats). Per-segment alpha solved from target_psi via bisection (D16). Bin counts deterministic. |
+| `generate_cohort(quarters, feature_targets, seed)` | `R/generate_cohort.R` | list: `$apps` (data.frame, ~141k rows), `$scorecard` (data.frame, ~137k rows), `$features` (data.frame, ~141k rows), `$meta` (per-quarter stats). Per-segment alpha solved from target_psi via bisection (D16). Features generated in Phase 2 with independent RNG stream (D17). Generalized solver accepts dev_weights for categorical features. Bin counts deterministic. |
+| `get_features_data(performance_window, write)` | `R/pull_features.R` | data.frame: one row per user_ref_num (D9). 7 columns: user_ref_num, feature_date, feature_1 (NUMERIC), feature_2 (NUMERIC), feature_3 (NUMERIC), feature_4 (TEXT), feature_5 (TEXT). Writes `data/features/features_YYYYMM.txt.gz` if `write=T`. |
 
 ## Supabase tables
 
-Both tables exist. Two load modes via `setup_supabase(mode)`:
-- `"minimal"`: 50 apps, 40 scorecard (sql/02_seed_minimal.sql, fast debugging)
-- `"generated"`: ~141k apps, ~137k scorecard across 4 quarters (D16)
+All three tables exist. Two load modes via `setup_supabase(mode)`:
+- `"minimal"`: 50 apps, 40 scorecard, 40 features (sql/02_seed_minimal.sql, fast debugging)
+- `"generated"`: ~141k apps, ~137k scorecard, ~141k features across 4 quarters (D16, D17)
 
-Schema: `sql/01_create_tables.sql`. Setup: `R/setup_supabase.R`.
+Schema: `sql/01_create_tables.sql`, `sql/03_create_features_table.sql`. Setup: `R/setup_supabase.R`.
 
 | Table | PK | Rows (generated) | Source contract |
 |---|---|---|---|
 | `applications` | `app_num` | 141,720 | `R/pull_apps.R:9-25` |
 | `scorecard` | `user_ref_num` (D9) | 136,840 | `R/function_cc_scorecard_data.R:7-15` |
+| `features` | `user_ref_num` (D9, D17) | 141,720 | `R/pull_features.R:7-15` |
 
 ## Where things live
 
 | What | Where |
 |---|---|
-| Decisions (D1-D16) | `.claude/docs/decisions.md` |
+| Decisions (D1-D17) | `.claude/docs/decisions.md` |
 | Pass artifacts | `.claude/passes/<task-name>/` |
 | R script catalog | `R/CATALOG.md` |
 | Project catalog | `CATALOG.md` |
