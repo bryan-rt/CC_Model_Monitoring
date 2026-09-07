@@ -30,11 +30,14 @@ compute_ks_stats <- function(df,
   )
 
   # --- Per-segment KS ---
+  # Convention: decile 1 = highest score = LOWEST risk (D20). Rows are sorted
+  # desc(score), then ntile() assigns group 1 to the first (highest-scoring)
+  # rows. Bad rates increase with decile number.
+  #
   # ntile() creates equal-SIZED groups. With integer scores (~350 distinct
   # values over ~14,000 booked rows per segment), identical scores split
   # across adjacent deciles by row order. This is a stated design choice (D20):
   # equal-sized bins are the right choice for rank-ordering because they
-
   # guarantee each decile has comparable statistical power. Decile boundaries
   # are NOT score boundaries — decile 4's score range may overlap decile 3
   # and 5. Score ranges (min_score, max_score) are reported per decile to
