@@ -31,12 +31,22 @@ PSI summary (Q3 2026, from `psi_quarterly.xlsx`):
 
 | Segment | PSI |
 |---------|-----|
-| All Segments | 0.15 |
+| All Segments | 0.0835 |
 | 0 | 0.30 |
 | 1 | 0.09 |
 | 2 | 0.25 |
 | 3 | 0.04 |
 | 4 | 0.15 |
+
+**Correction (2026-09-07)**: All Segments was originally recorded as 0.15 --
+a transcription error (0.15 is segment 4's value on the next row). The actual
+value is 0.0835 (full precision: 0.08351459). This differs from the pre-KS-task
+value of 0.08472267 by -0.00121. Per-segment PSI values are bit-identical to
+pre-KS-task values, confirming per-segment RNG invariance holds. All Segments
+moved because it re-bins scores through an independent break vector -- the
+KS task's addition of per-segment approval rates shifted the RNG stream,
+changing within-bin score positions, and some scores crossed All Segments bin
+boundaries. See D17 amendment. The transcription error masked this finding.
 
 CSI summary (Q3 2026, from `csi_quarterly.xlsx`, All Segments row):
 
@@ -48,14 +58,16 @@ CSI summary (Q3 2026, from `csi_quarterly.xlsx`, All Segments row):
 | feature_4 | 0.07 |
 | feature_5 | 0.04 |
 
-These match pre-change values. PSI/CSI invariance holds because: (1) approval
-is not in the PSI/CSI filter chain (client_product_cd, prim_score, has_segment),
-(2) PSI/CSI are RNG-invariant (D17), (3) the mature quarter and dev cohort use
+Per-segment PSI/CSI invariance holds because: (1) approval is not in the
+PSI/CSI filter chain (client_product_cd, prim_score, has_segment), (2)
+per-segment PSI is RNG-invariant (D17 -- bin counts come from
+deterministic_allocate), (3) the mature quarter and dev cohort use
 `set.seed(seed + 2000L)` and `set.seed(seed + 3000L)` after all existing
 generation, so the main loop and Phase 2 feature stream are structurally
-untouched.
+untouched. All Segments PSI is NOT RNG-invariant (see D17 amendment).
 
-STATUS: VERIFIED — Rmd ran end-to-end, xlsx outputs produced.
+STATUS: VERIFIED — Rmd ran end-to-end, xlsx outputs produced. All Segments
+value corrected 2026-09-07 from transcription error.
 
 ## V2. Approval rate per segment
 
