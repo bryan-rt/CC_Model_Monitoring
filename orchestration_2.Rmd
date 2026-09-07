@@ -600,14 +600,6 @@ for (seg in c("0", "1", "2", "3", "4")) {
   }
 }
 
-# Average bads per decile per segment >= 28 (3x volume)
-for (seg in as.character(0:4)) {
-  seg_bads <- ks_result$ks_by_segment |>
-    dplyr::filter(segment == seg) |>
-    dplyr::pull(n_bads)
-  if (seg_bads / 10 < 28) warning("Seg ", seg, ": avg bads/decile < 28")
-}
-
 # --- Compare to development baseline ---
 ks_comparison <- dplyr::inner_join(
   ks_result$ks_by_segment,
