@@ -100,7 +100,7 @@ STATUS: VERIFIED — from ks_baseline.R and ks_quarterly.xlsx.
 
 | Segment | Target KS | Achieved KS | Delta |
 |---------|-----------|-------------|-------|
-| All Segments | <35 (predicted) | 31.4 | Pass |
+| All Segments | — (no target; predicted below most segments) | 31.4 | Confirmed below all except seg 4 |
 | 0 | 42 | 41.8 | -0.2 |
 | 1 | 40 | 40.1 | +0.1 |
 | 2 | 38 | 38.1 | +0.1 |
@@ -114,7 +114,7 @@ values except segment 4 (28.2), confirming the pooling prediction from the plan.
 
 | Segment | Target KS | Achieved KS | Delta from dev |
 |---------|-----------|-------------|----------------|
-| All Segments | <30 (predicted) | 28.5 | -2.9 |
+| All Segments | — (no target; predicted below most segments) | 28.5 | -2.9 |
 | 0 | ~33 | 33.2 | -8.6 (degraded, expected) |
 | 1 | ~39 | 39.1 | -1.0 |
 | 2 | ~37 | 37.2 | -0.9 |
@@ -330,15 +330,16 @@ segment 0 sparsity note below.
 | Segment | Monotonic? | Break location |
 |---------|-----------|----------------|
 | 0 | No | Deciles 5→6 (0.028→0.023), 6→7 (0.023→0.014), 7→8 (0.014→0.016) |
-| 1 | No | Decile 2→3 (0.0106→0.0095) |
-| 2 | No | Decile 2→3 (0.0138→0.0138 is a tie — passes; actual break is in score ranges) |
+| 1 | No | Decile 2→3 (0.0106→0.0095) — minor sampling-noise inversion |
+| 2 | Yes | — (deciles 2→3 tie at 0.0138, passes non-strict test) |
 | 3 | Yes | — |
-| 4 | No | Decile 8→9 (0.0990→0.1031 passes; but 3→4 has 0.0387→0.0398 which passes) |
+| 4 | Yes | — (all diffs non-negative) |
 
 Segment 0's multi-decile break in deciles 5-8 is the Gaussian bump (D20) —
-the performance signal that pairs with its elevated PSI. Segments 1-4 have
-minor sampling-noise inversions, reported as warnings (not hard stops) in the
-Rmd since these are monitoring observations.
+the performance signal that pairs with its elevated PSI. Segment 1 has a minor
+sampling-noise inversion (0.0106→0.0095, 2 bads difference), reported as a
+warning (not a hard stop) in the Rmd since this is a monitoring observation.
+Segments 2, 3, and 4 are monotonic.
 
 STATUS: VERIFIED — warnings emitted during Rmd run.
 
@@ -413,6 +414,15 @@ The monotonicity assertion is **non-strict** (`diffs >= 0`, ties pass). Deciles
 2 and 3 having the same rate is a tie on single-digit counts, not a violation.
 A strict-monotonicity assertion (`diffs > 0`) would be inappropriate here
 because at these count levels, identical rates are expected by construction.
+
+The same sparsity pattern appears in the current cohort: segment 0 decile 1 has
+**zero** bads in 1,538 accounts (bad rate 0.0000). This is a floor artifact —
+at a 2.23% overall bad rate with strong rank ordering (KS 33.2), the best
+decile genuinely has near-zero risk. The 0.0000 rate is not a measurement of
+zero risk but an artifact of Bernoulli draws on a very small expected count
+(1,538 * 0.002 ≈ 3 expected bads, realized as 0). Deciles 2-3 have 3 and 10
+bads respectively — still single-digit or low double-digit counts where
+individual rates are dominated by sampling noise.
 
 ---
 
