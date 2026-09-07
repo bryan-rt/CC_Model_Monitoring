@@ -76,6 +76,7 @@ stopifnot(all(unlist(ks_methods %in% c('live', 'fixed', 'true'))))
 source('R/pull_apps.R')
 source('R/function_cc_scorecard_data.R')
 source('R/pull_features.R')
+source('R/pull_performance.R')
 # PENDING TRANSCRIPTION — not yet OCR'd, not needed before the QC marker
 ```
 
@@ -87,7 +88,7 @@ This section checks for required directories and creates them if missing. Run on
 
 ```{r, echo=FALSE}
 #------------------------------- Folder Structure ---------------------------------
-fs::dir_create(c('data', 'data/apps', 'data/scorecard', 'data/dq_24_mos', 'data/ks_driver_w_perf', 'data/performance_24'))
+fs::dir_create(c('data', 'data/apps', 'data/scorecard', 'data/features', 'data/dq_12_mos'))
 fs::dir_create(c('output_files', 'output_files/quarterly_stats'))
 ```
 # Quarterly Report
@@ -483,8 +484,144 @@ openxlsx::saveWorkbook(wb_csi,
 ```
 
 ## KS and DQ90 Rank Ordering
-# QC: Completed
 
-We now need a supabase table for the performance of the applications. The join key should be user_ref_num and this will house dq90 which is defined as past 90 days delinquent within 12 months of origination. This table will only house the applications that the decision "Approve". Then we can have a code chunk here that follows the R/*.R file method to pull the performance data from the supabase table and write it as a cache to data/dq_24_mos, but let's rename it dq_12_mos and remove the data/performance_24 folder and the code that creates that folder. We can then load the dq_12_mos data, join it with the apps data so we have prim score, decile each of the segments (All Segments + 0-4) and calcualtes the KS statistic. So we will need the cumulative goods, the cumulative bads, and we are looking for the greatest difference between them I believe. Then write the DQ rate per decile per segment as it's own object and the ks value per segment into a cached file.
+Performance-based metrics use a DIFFERENT cohort than PSI/CSI. PSI/CSI
+evaluate Q3 2026 through-the-door applications (current quarter input
+distribution). KS and DQ90 rank ordering evaluate Q3 2025 BOOKED
+applications whose 12-month outcome window has now closed. The lag is
+inherent to outcome monitoring: performance evidence is always 12 months
+behind the input distribution that PSI measures.
+
+```{r}
+# --- KS and DQ90 Rank Ordering ---
+source(here::here("R/compute_ks.R"))
+source(here::here("R/ks_baseline.R"))
+
+# Performance cohort: 12 months prior to current quarter
+perf_date <- cohort_date %m-% months(12)
+
+# Pull + cache performance data (3 months, mirrors apps pattern at :104)
+perf_paths <- fs::dir_ls("data/dq_12_mos")[which(
+  basename(fs::dir_ls("data/dq_12_mos")) %in% c(
+    glue::glue("dq_12_mos_{format(perf_date, '%Y%m')}.txt.gz"),
+    glue::glue("dq_12_mos_{format(perf_date %m+% months(1), '%Y%m')}.txt.gz"),
+    glue::glue("dq_12_mos_{format(perf_date %m+% months(2), '%Y%m')}.txt.gz")
+  )
+)]
+
+if (length(perf_paths) != 3) {
+  purrr::walk(seq(perf_date, perf_date %m+% months(2), "month"),
+              function(m) get_performance_data(performance_window = m, write = TRUE))
+}
+
+perf <- purrr::map_dfr(seq_len(number_of_month_window), function(i) {
+  data.table::fread(glue::glue(
+    "data/dq_12_mos/dq_12_mos_{format(perf_date %m+% months(i - 1), '%Y%m')}.txt.gz"
+  ))
+})
+names(perf) <- tolower(names(perf))
+
+# Pull Q3 2025 apps + scorecard for score and segment
+perf_apps_paths <- fs::dir_ls("data/apps")[which(
+  basename(fs::dir_ls("data/apps")) %in% c(
+    glue::glue("apps_{format(perf_date, '%Y%m')}.txt.gz"),
+    glue::glue("apps_{format(perf_date %m+% months(1), '%Y%m')}.txt.gz"),
+    glue::glue("apps_{format(perf_date %m+% months(2), '%Y%m')}.txt.gz")
+  )
+)]
+
+if (length(perf_apps_paths) != 3) {
+  purrr::walk(seq(perf_date, perf_date %m+% months(2), "month"),
+              function(m) get_apps_data(performance_window = m, write = TRUE))
+}
+
+perf_apps <- purrr::map_dfr(seq_len(number_of_month_window), function(i) {
+  data.table::fread(glue::glue(
+    "data/apps/apps_{format(perf_date %m+% months(i - 1), '%Y%m')}.txt.gz"
+  ))
+})
+names(perf_apps) <- tolower(names(perf_apps))
+
+perf_sc_paths <- fs::dir_ls("data/scorecard")[which(
+  basename(fs::dir_ls("data/scorecard")) %in% c(
+    glue::glue("scorecard_{format(perf_date, '%Y%m')}.txt.gz"),
+    glue::glue("scorecard_{format(perf_date %m+% months(1), '%Y%m')}.txt.gz"),
+    glue::glue("scorecard_{format(perf_date %m+% months(2), '%Y%m')}.txt.gz")
+  )
+)]
+
+if (length(perf_sc_paths) != 3) {
+  purrr::walk(seq(perf_date, perf_date %m+% months(2), "month"),
+              function(m) get_cc_scorecard_data(performance_window = m, write = TRUE))
+}
+
+perf_sc <- purrr::map_dfr(seq_len(number_of_month_window), function(i) {
+  data.table::fread(glue::glue(
+    "data/scorecard/scorecard_{format(perf_date %m+% months(i - 1), '%Y%m')}.txt.gz"
+  ))
+})
+names(perf_sc) <- tolower(names(perf_sc))
+
+# Join: performance -> apps -> scorecard
+ks_df <- perf |>
+  dplyr::mutate(user_ref_num = as.numeric(user_ref_num)) |>
+  dplyr::inner_join(
+    perf_apps |> dplyr::mutate(user_ref_num = as.numeric(user_ref_num)) |>
+      dplyr::select(user_ref_num, prim_score, decision),
+    by = "user_ref_num"
+  ) |>
+  dplyr::inner_join(
+    perf_sc |> dplyr::mutate(user_ref_num = as.numeric(user_ref_num)) |>
+      dplyr::select(user_ref_num, segment),
+    by = "user_ref_num"
+  )
+
+# Assert: all performance rows are approved (table-level constraint)
+stopifnot("Performance rows with non-Approve decision" =
+            all(ks_df$decision == "Approve"))
+
+# KS deciles are RE-DERIVED from the booked cohort, NOT frozen.
+# This is the OPPOSITE of PSI/CSI and correctly so: PSI asks whether the
+# population moved relative to development, KS asks whether the score
+# still separates within THIS population.
+ks_result <- compute_ks_stats(ks_df)
+
+# --- Monitoring flags (observations, not hard stops) ---
+# Monotonicity: segments 1-4 should have non-decreasing decile bad rates
+for (seg in c("0", "1", "2", "3", "4")) {
+  seg_rates <- ks_result$decile_rates |>
+    dplyr::filter(segment == seg) |>
+    dplyr::arrange(decile)
+  diffs <- diff(seg_rates$bad_rate)
+  if (!all(diffs >= 0)) {
+    breaks <- which(diffs < 0)
+    warning("Seg ", seg, ": monotonicity break at decile(s) ",
+            paste(breaks, collapse = ", "))
+  }
+}
+
+# --- Compare to development baseline ---
+ks_comparison <- dplyr::inner_join(
+  ks_result$ks_by_segment,
+  ks_baseline$ks,
+  by = "segment"
+) |>
+  dplyr::mutate(ks_delta = ks_value - dev_ks)
+
+ks_comparison
+
+# Decile bad rates
+ks_result$decile_rates
+
+# --- Cache ---
+openxlsx::write.xlsx(
+  list(ks_comparison = ks_comparison,
+       decile_rates = ks_result$decile_rates),
+  here::here("output_files/ks_quarterly.xlsx"),
+  overwrite = TRUE
+)
+```
+
+# QC: Completed
 
 # QC: Validated

@@ -18,12 +18,14 @@ setup_supabase <- function(mode = c("minimal", "generated")) {
     }
   }
 
+  DBI::dbExecute(conn, "DROP TABLE IF EXISTS performance CASCADE")
   DBI::dbExecute(conn, "DROP TABLE IF EXISTS applications CASCADE")
   DBI::dbExecute(conn, "DROP TABLE IF EXISTS scorecard CASCADE")
   DBI::dbExecute(conn, "DROP TABLE IF EXISTS features CASCADE")
 
   execute_sql_file(conn, here::here("sql/01_create_tables.sql"))
   execute_sql_file(conn, here::here("sql/03_create_features_table.sql"))
+  execute_sql_file(conn, here::here("sql/04_create_performance_table.sql"))
 
   if (mode == "minimal") {
     execute_sql_file(conn, here::here("sql/02_seed_minimal.sql"))
@@ -34,9 +36,11 @@ setup_supabase <- function(mode = c("minimal", "generated")) {
     DBI::dbAppendTable(conn, "applications", result$apps)
     DBI::dbAppendTable(conn, "scorecard", result$scorecard)
     DBI::dbAppendTable(conn, "features", result$features)
+    DBI::dbAppendTable(conn, "performance", result$performance)
     message("Setup complete: generated cohorts loaded (",
             nrow(result$apps), " apps, ",
             nrow(result$scorecard), " scorecard, ",
-            nrow(result$features), " features rows).")
+            nrow(result$features), " features, ",
+            nrow(result$performance), " performance rows).")
   }
 }
