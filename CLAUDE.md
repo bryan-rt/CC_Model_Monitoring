@@ -4,13 +4,16 @@ Quarterly monitoring pipeline for a custom credit card application scorecard.
 Rebuilds production pipeline (DB2/Databricks) from OCR screenshots, rewired to
 Supabase (Postgres) with generic tables.
 
-Primary orchestrator: `orchestration_2.Rmd` (825 lines, 10 chunks).
-Validated frontier: line 825 (`# QC: Validated`) — VALIDATED: has run
+Primary orchestrator: `orchestration_2.Rmd` (911 lines, 15 chunks).
+Validated frontier: line 911 (`# QC: Validated`) — VALIDATED: has run
 against live Supabase (D5). psi_df: 30,500 rows (generated cohort), segments
-0-4. PSI + CSI + KS + confidence intervals run clean through :821.
+0-4. PSI + CSI + KS + confidence intervals run clean through :850.
 CI bootstrap chunks add ~2 minutes to a full run (PSI 28s, CSI 63s, KS 29s).
-  (anchor: :825 = `# QC: Validated` marker)
-  (anchor: :823 = `# QC: Completed` marker)
+Visual chunks (D23) added after each KPI section: PSI trend table/chart,
+CSI heatmap + conditional drilldowns, KS comparison + rank ordering,
+executive summary. All visuals source data via load_metrics_history().
+  (anchor: :911 = `# QC: Validated` marker)
+  (anchor: :909 = `# QC: Completed` marker)
 
 cohort_date (orchestration_2.Rmd:65-71): overridable parameter, defaults to
 current quarter. Set `cohort_date <- as.Date("YYYY-MM-DD")` before running
@@ -29,40 +32,53 @@ Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`,
 `scrub-rmd-credentials`, `create-supabase-tables`, `make-rmd-run-to-marker`,
 `build-psi-calculation`, `sample-data-generator`, `create-features-table`,
 `build-feature-breaks`, `build-csi-calculation`, `build-performance-table-and-ks`,
-`add-confidence-intervals`, `build-metrics-cache`.
-Next sequence: round-trip test -> fix-orchestration-rmd.
+`add-confidence-intervals`, `build-metrics-cache`, `build-report-visuals`.
+Next sequence: cache-manifest -> round-trip test -> fix-orchestration-rmd.
 
-CSI (orchestration_2.Rmd:400-617) is fully built: pulls features, joins to PSI
+CSI (orchestration_2.Rmd:409-627) is fully built: pulls features, joins to PSI
 population, computes CSI per feature x segment using the shared
 `compute_stability_index()` helper in `R/compute_si.R` (D19). PSI chunk
 refactored to use the same helper. Outputs `csi_quarterly.xlsx` (6 tabs: one
 per feature + ci tab) and `csi_summary` (6 segments x 5 features).
-  (anchor: :400 = CSI chunk opening fence `\`\`\`{r}`)
-  (anchor: :273 = `source(here::here("R/compute_si.R"))` in PSI chunk)
+  (anchor: :409 = CSI chunk opening fence `\`\`\`{r}`)
+  (anchor: :272 = `source(here::here("R/compute_si.R"))` in PSI chunk)
 
-KS (orchestration_2.Rmd:619-821) is fully built: pulls 12-month-lagged
+KS (orchestration_2.Rmd:648-850) is fully built: pulls 12-month-lagged
 performance cohort (Q3 2025), joins to apps+scorecard for score and segment,
 computes KS and decile bad rates via `compute_ks_stats()` in `R/compute_ks.R`
 (D20). Compares to frozen dev baseline in `R/ks_baseline.R`. Outputs
 `ks_quarterly.xlsx` (2 tabs: ks_comparison, decile_rates).
-  (anchor: :628 = KS chunk opening fence `\`\`\`{r}`)
-  (anchor: :630 = `source(here::here("R/compute_ks.R"))` in KS chunk)
+  (anchor: :657 = KS chunk opening fence `\`\`\`{r}`)
+  (anchor: :659 = `source(here::here("R/compute_ks.R"))` in KS chunk)
 
 Confidence intervals (D21): PSI, CSI, KS use stratified percentile bootstrap
 (B=500, `R/bootstrap_ci.R`). Decile bad rates use Wilson score intervals
 (`R/wilson_ci.R`). PSI carries tier (stable/watch/investigate) and
 tier_certain (FALSE when CI spans a threshold).
   (anchor: :323 = PSI bootstrap)
-  (anchor: :516 = CSI bootstrap)
-  (anchor: :747 = KS bootstrap)
-  (anchor: :789 = Wilson CI for decile bad rates)
+  (anchor: :531 = CSI bootstrap)
+  (anchor: :778 = KS bootstrap)
+  (anchor: :819 = Wilson CI for decile bad rates)
 
 Metrics cache (D22): Per-quarter summary CSVs in
 `output_files/quarterly_stats/{PSI,CSI,KS}/`. Named by REPORT quarter (YYYYQn),
 with `data_cohort` column recording the actual data period. KS data_cohort is
-12 months prior (perf_date at :634). `R/write_metrics_cache.R` writes,
+12 months prior (perf_date at :663). `R/write_metrics_cache.R` writes,
 `R/load_metrics_history.R` reads. Schema-validated on both write and read.
 Provenance: report_quarter, data_cohort, code_version, run_timestamp.
+
+Report visuals (D23): `R/report_visuals.R` contains 8 functions for all charts
+and tables. PSI trend table (flextable) + trend chart (faceted ggplot), CSI
+heatmap + conditional drilldown bars (capped at 3 flagged segments), KS
+comparison chart + change table, rank-ordering chart (faceted, free y), and
+executive summary table. CSI section labeled "Candidate drivers" — CSI does
+not decompose PSI (D23). Executive summary at end of Rmd; moves to front
+during docx assembly.
+  (anchor: :394 = PSI visuals chunk)
+  (anchor: :637 = CSI visuals chunk)
+  (anchor: :854 = KS visuals chunk)
+  (anchor: :862 = Rank ordering chunk)
+  (anchor: :903 = Executive summary chunk)
 
 ## Pull function contracts
 
@@ -101,7 +117,7 @@ Schema: `sql/01_create_tables.sql`, `sql/03_create_features_table.sql`, `sql/04_
 
 | What | Where |
 |---|---|
-| Decisions (D1-D22) | `.claude/docs/decisions.md` |
+| Decisions (D1-D24) | `.claude/docs/decisions.md` |
 | Pass artifacts | `.claude/passes/<task-name>/` |
 | R script catalog | `R/CATALOG.md` |
 | Project catalog | `CATALOG.md` |

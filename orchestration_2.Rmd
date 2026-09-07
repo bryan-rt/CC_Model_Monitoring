@@ -1,7 +1,7 @@
 ---
 title: "CC Custom Scorecard Quarterly Report"
 author: "Bryan Thomas"
-date: "2026-04-28"
+date: "`r Sys.Date()`"
 output: html_document
 ---
 
@@ -65,7 +65,7 @@ options(scipen = 999)
 # --- COHORT DATE ---
 # Override: uncomment and set to the quarter start date before running.
 # Available quarters (generated data): 2025Q4, 2026Q1, 2026Q2, 2026Q3
-# cohort_date <- as.Date('2026-07-01')
+cohort_date <- as.Date('2026-07-01')
 if (!exists("cohort_date")) {
   cohort_date <- lubridate::floor_date(Sys.Date(), "quarter")
 }
@@ -79,7 +79,6 @@ source('R/pull_apps.R')
 source('R/function_cc_scorecard_data.R')
 source('R/pull_features.R')
 source('R/pull_performance.R')
-# PENDING TRANSCRIPTION — not yet OCR'd, not needed before the QC marker
 ```
 
 ### 5) Folder Init
@@ -390,6 +389,16 @@ psi_cache <- psi_summary |>
 write_metrics_cache("PSI", psi_cache, cohort_date)
 ```
 
+## PSI Trend Visuals
+
+```{r psi_visuals}
+source(here::here("R/report_visuals.R"))
+source(here::here("R/load_metrics_history.R"))
+psi_hist <- load_metrics_history("PSI", 4)
+psi_trend_table(psi_hist)
+psi_trend_chart(psi_hist)
+```
+
 ## CSI
 
 CSI evaluates drift in the model's input features. Each feature is binned using
@@ -616,6 +625,26 @@ csi_cache <- csi_ci |>
 write_metrics_cache("CSI", csi_cache, cohort_date)
 ```
 
+## Candidate Drivers of Score Distribution Shift
+
+The score distribution shifted (PSI above), and among model inputs the features
+below also shifted materially while others held. These are candidate drivers,
+not a decomposition: CSI and PSI are independent calculations on different
+variables. Attributing a specific share of the PSI shift to a given feature
+would require the scorecard weights and a sensitivity analysis, which is outside
+the scope of this quarterly review.
+
+```{r csi_visuals}
+csi_hist <- load_metrics_history("CSI", 4)
+current_q <- max(psi_hist$report_quarter)
+csi_heatmap(csi_hist, current_q)
+drilldowns <- csi_drilldown_bars(csi_hist, psi_hist, current_q, max_segments = 3)
+for (nm in names(drilldowns)) {
+  cat("\n\n### Segment", nm, "— Feature Drill-Down\n\n")
+  print(drilldowns[[nm]])
+}
+```
+
 ## KS and DQ90 Rank Ordering
 
 Performance-based metrics use a DIFFERENT cohort than PSI/CSI. PSI/CSI
@@ -820,6 +849,59 @@ decile_cache <- ks_result$decile_rates |>
 write_metrics_cache("KS_DECILES", decile_cache, cohort_date, perf_date = perf_date)
 ```
 
-# QC: Completed
+## KS and Rank-Ordering Visuals
 
-# QC: Validated
+```{r ks_visuals}
+ks_hist <- load_metrics_history("KS")
+ks_comparison_chart(ks_hist)
+ks_change_table(ks_hist)
+```
+
+## Rank Ordering by Segment
+
+```{r rank_order_visuals}
+decile_hist <- load_metrics_history("KS_DECILES")
+source(here::here("R/ks_baseline.R"))
+rank_order_chart(decile_hist, ks_baseline$decile_rates)
+```
+
+## Threshold Provenance and Methods
+
+### Thresholds and Actions
+
+| Metric | Stable | Watch | Investigate |
+|---|---|---|---|
+| PSI / CSI | < 0.10 | 0.10 – 0.25 | > 0.25 |
+| KS relative decline | < 10% | 10% – 15% | > 15% |
+| Rank ordering | Monotonic | — | Any break in middle deciles |
+
+**Actions:**
+
+- **Stable**: No action; note in quarterly review.
+- **Watch**: Flag in quarterly review; compare to prior quarters for trend.
+- **Investigate**: Notify model owner; assess refit need; document in model risk log.
+
+### Statistical Methods
+
+Confidence intervals use two methods:
+
+- **Bootstrap** (B = 500, stratified percentile): PSI, CSI, and KS. Resamples
+  rows within each segment, holding group size fixed. Measures sampling
+  variability of the metric given the observed cohort.
+- **Wilson score**: Decile bad rates. Closed-form binomial CI; survives zero
+  counts.
+
+These intervals reflect sampling variability — "if a cohort with this shape had
+been drawn differently, how much would the metric move?" They do NOT predict
+regeneration variance from the data generator.
+
+## Executive Summary
+
+_Placement note: this summary requires values computed throughout the document.
+During docx assembly it moves to the front of the report._
+
+```{r executive_summary}
+exec_tbl <- executive_summary_table(psi_hist, ks_hist, decile_hist,
+                                     ks_baseline$decile_rates)
+exec_tbl
+```
