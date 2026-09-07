@@ -62,8 +62,10 @@ library(data.table)
 
 set.seed(42)
 options(scipen = 999)
-# cohort_date: override by setting before knitting; defaults to current quarter
-# cohort_date <- as.Date('2026-04-01')
+# --- COHORT DATE ---
+# Override: uncomment and set to the quarter start date before running.
+# Available quarters (generated data): 2025Q4, 2026Q1, 2026Q2, 2026Q3
+# cohort_date <- as.Date('2026-07-01')
 if (!exists("cohort_date")) {
   cohort_date <- lubridate::floor_date(Sys.Date(), "quarter")
 }
@@ -89,7 +91,10 @@ This section checks for required directories and creates them if missing. Run on
 ```{r, echo=FALSE}
 #------------------------------- Folder Structure ---------------------------------
 fs::dir_create(c('data', 'data/apps', 'data/scorecard', 'data/features', 'data/dq_12_mos'))
-fs::dir_create(c('output_files', 'output_files/quarterly_stats'))
+fs::dir_create(c('output_files', 'output_files/quarterly_stats',
+                 'output_files/quarterly_stats/PSI',
+                 'output_files/quarterly_stats/CSI',
+                 'output_files/quarterly_stats/KS'))
 ```
 # Quarterly Report
 
@@ -378,6 +383,8 @@ fs::dir_create(here::here("output_files"))
 openxlsx::saveWorkbook(wb,
   here::here("output_files/psi_quarterly.xlsx"),
   overwrite = TRUE)
+source(here::here("R/write_metrics_cache.R"))
+write_metrics_cache("PSI", psi_summary, cohort_date)
 ```
 
 ## CSI
@@ -596,6 +603,14 @@ openxlsx::writeDataTable(wb_csi, "ci", csi_ci)
 openxlsx::saveWorkbook(wb_csi,
   here::here("output_files/csi_quarterly.xlsx"),
   overwrite = TRUE)
+csi_cache <- csi_ci |>
+  dplyr::rename(CSI = estimate) |>
+  dplyr::select(-B) |>
+  dplyr::left_join(
+    csi_summary_long |> dplyr::select(Scorecard, feature, current_count, epsilon_share),
+    by = c("Scorecard", "feature")
+  )
+write_metrics_cache("CSI", csi_cache, cohort_date)
 ```
 
 ## KS and DQ90 Rank Ordering
@@ -719,7 +734,8 @@ for (seg in c("0", "1", "2", "3", "4")) {
 ks_comparison <- dplyr::inner_join(
   ks_result$ks_by_segment,
   ks_baseline$ks,
-  by = "segment"
+  by = "segment",
+  suffix = c("", "_dev")
 ) |>
   dplyr::mutate(ks_delta = ks_value - dev_ks)
 
@@ -793,6 +809,12 @@ openxlsx::write.xlsx(
   here::here("output_files/ks_quarterly.xlsx"),
   overwrite = TRUE
 )
+ks_cache <- ks_comparison |>
+  dplyr::select(segment, ks_value, dev_ks, ks_delta, ci_lower, ci_upper, n_booked, n_bads)
+write_metrics_cache("KS", ks_cache, cohort_date, perf_date = perf_date)
+decile_cache <- ks_result$decile_rates |>
+  dplyr::select(segment, decile, n, n_bads, bad_rate, ci_lower, ci_upper, min_score, max_score)
+write_metrics_cache("KS_DECILES", decile_cache, cohort_date, perf_date = perf_date)
 ```
 
 # QC: Completed
