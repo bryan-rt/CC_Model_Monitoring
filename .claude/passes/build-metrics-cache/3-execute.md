@@ -57,7 +57,7 @@ Date: 2026-09-07
 5. **:737-738** — n_booked suffix fix: `suffix = c("", "_dev")` on inner_join (+1 line)
 6. **:812-817** — KS cache writes: ks_summary + ks_deciles (+6 lines, -1 closing fence = +5 net)
 
-**Line count**: 801 -> 822 (+21 lines)
+**Line count**: 801 -> 825 (+24 lines)
 
 ### Fixes from Pass 2 review
 
@@ -81,14 +81,30 @@ Date: 2026-09-07
 
 ## Deviations from plan
 
-1. **Line delta was +21, not +18**. The dir_create expansion was +3 (not +2)
-   and the CSI cache block was +8 (not +6) because the left_join pipeline
-   needed more lines than estimated.
+1. **Line delta was +24 (825 final), not +18**. The dir_create expansion was
+   +3 (not +2), the CSI cache block was +8 (not +6), and a post-review fix
+   added +3 for the PSI select (see below).
 
 2. **Test 9 (missing folder)** tests the error message construction rather
    than calling load_metrics_history with a truly nonexistent KPI (since the
    function validates KPI names first). The test manually checks dir.exists
    to exercise the error path.
+
+3. **Post-review fix: PSI schema mismatch**. The initial commit passed
+   `psi_summary` directly to `write_metrics_cache("PSI", ...)` at :387.
+   But `psi_summary` carries `epsilon_only` and `B` columns that are not in
+   `.cache_schemas$PSI`, so the validator would reject it with "Extra:
+   epsilon_only, B." on the first real render. Fixed by adding a
+   `psi_cache <- psi_summary |> dplyr::select(...)` matching the other three
+   call sites. All four verified column-by-column against `.cache_schemas`.
+
+   **Process note (D5 reprise)**: 27/27 unit tests passed because the tests
+   constructed synthetic frames that matched the schemas by definition. They
+   proved the validator works; they never tested whether the real pipeline
+   objects conform. This is the same pattern as "reviewed is not validated"
+   (D5). Added Test 13: pipeline shape assertions that encode the actual
+   column lists from the Rmd select() sites, checked against `.cache_schemas`.
+   If a future Rmd change adds or renames a column, Test 13 fails.
 
 ## Anchor shift table (verified by grep)
 
@@ -122,7 +138,7 @@ Date: 2026-09-07
 
 ## Test output
 
-All 27 assertions passed. Key demonstrations:
+All 31 assertions passed (27 original + 4 shape tests). Key demonstrations:
 
 ```
 === Test 1: PSI write + read round-trip ===
@@ -160,7 +176,13 @@ fatal: not a git repository (or any of the parent directories): .git
   PASS: File written from non-git dir
   PASS: code_version = 'unknown' in non-git dir
 
+=== Test 13: Pipeline object shapes vs .cache_schemas ===
+  PASS: PSI pipeline shape matches .cache_schemas
+  PASS: CSI pipeline shape matches .cache_schemas
+  PASS: KS pipeline shape matches .cache_schemas
+  PASS: KS_DECILES pipeline shape matches .cache_schemas
+
 === RESULTS ===
-Passed: 27 / 27
+Passed: 31 / 31
 All tests passed.
 ```

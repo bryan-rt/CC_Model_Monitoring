@@ -279,6 +279,43 @@ assignInNamespace("here", function(...) file.path(test_root, ...), ns = "here")
 unlink(nogit_root, recursive = TRUE)
 
 # ===========================================================================
+message("\n=== Test 13: Pipeline object shapes vs .cache_schemas ===")
+# ===========================================================================
+# These are the ACTUAL columns that the Rmd pipeline objects carry after
+# the select() at each call site. If the Rmd changes a column name or adds
+# one, this test catches it — unlike Tests 1-12 which use synthetic frames
+# that match by definition (D5: "reviewed is not validated").
+#
+# PSI: psi_summary |> select(Scorecard, Population_Stability_Index, ci_lower,
+#   ci_upper, tier, tier_certain, current_count, epsilon_share)
+# CSI: csi_ci |> rename(CSI=estimate) |> select(-B) |> left_join(
+#   csi_summary_long[current_count, epsilon_share])
+# KS: ks_comparison |> select(segment, ks_value, dev_ks, ks_delta, ci_lower,
+#   ci_upper, n_booked, n_bads)
+# KS_DECILES: decile_rates |> select(segment, decile, n, n_bads, bad_rate,
+#   ci_lower, ci_upper, min_score, max_score)
+
+pipeline_shapes <- list(
+  PSI = c("Scorecard", "Population_Stability_Index", "ci_lower", "ci_upper",
+          "tier", "tier_certain", "current_count", "epsilon_share"),
+  CSI = c("Scorecard", "feature", "CSI", "ci_lower", "ci_upper",
+          "current_count", "epsilon_share"),
+  KS  = c("segment", "ks_value", "dev_ks", "ks_delta", "ci_lower", "ci_upper",
+          "n_booked", "n_bads"),
+  KS_DECILES = c("segment", "decile", "n", "n_bads", "bad_rate", "ci_lower",
+                 "ci_upper", "min_score", "max_score")
+)
+
+for (kpi in names(pipeline_shapes)) {
+  schema_cols <- .cache_schemas[[kpi]]
+  pipe_cols <- pipeline_shapes[[kpi]]
+  assert(
+    paste0(kpi, " pipeline shape matches .cache_schemas"),
+    identical(schema_cols, pipe_cols)
+  )
+}
+
+# ===========================================================================
 message("\n=== RESULTS ===")
 message("Passed: ", pass, " / ", pass + fail)
 if (fail > 0) message("FAILED: ", fail) else message("All tests passed.")

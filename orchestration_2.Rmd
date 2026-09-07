@@ -384,7 +384,10 @@ openxlsx::saveWorkbook(wb,
   here::here("output_files/psi_quarterly.xlsx"),
   overwrite = TRUE)
 source(here::here("R/write_metrics_cache.R"))
-write_metrics_cache("PSI", psi_summary, cohort_date)
+psi_cache <- psi_summary |>
+  dplyr::select(Scorecard, Population_Stability_Index, ci_lower, ci_upper,
+                tier, tier_certain, current_count, epsilon_share)
+write_metrics_cache("PSI", psi_cache, cohort_date)
 ```
 
 ## CSI
