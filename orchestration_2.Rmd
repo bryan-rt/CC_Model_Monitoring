@@ -267,6 +267,8 @@ and write to a cached xlsx with one tab per segment.
 # Load shared stability index helper and development population reference
 source(here::here("R/compute_si.R"))
 source(here::here("R/build_dev_population.R"))
+source(here::here("R/wilson_ci.R"))
+source(here::here("R/bootstrap_ci.R"))
 dev_pop <- build_dev_population(here::here("data/dev_population/dev_population.txt.gz"))
 
 # Full join: dev side drives the 120-row frame; coalesce empty current bins to 0
@@ -310,6 +312,59 @@ psi_data_list <- purrr::map(psi_result$detail, function(tbl) {
 
 psi_summary <- psi_result$summary |>
   dplyr::rename(Population_Stability_Index = SI_value)
+
+psi_summary
+
+# --- PSI Bootstrap CI ---
+psi_boot <- bootstrap_ci(
+  data      = psi_df |> dplyr::mutate(segment = as.character(as.numeric(segment))),
+  group_col = "segment",
+  stat_fn   = function(df) {
+    boot_all <- df |>
+      dplyr::mutate(all_bucket_aligned = bucket_scores(prim_score, segment_breaks[["All Segments"]])) |>
+      dplyr::group_by(all_bucket_aligned) |>
+      dplyr::summarise(counts = dplyr::n(), .groups = "drop") |>
+      dplyr::mutate(Scorecard = "All Segments")
+    boot_seg <- df |>
+      dplyr::group_by(segment) |>
+      dplyr::group_modify(~ {
+        brks <- segment_breaks[[.y$segment]]
+        .x |>
+          dplyr::mutate(all_bucket_aligned = bucket_scores(prim_score, brks)) |>
+          dplyr::group_by(all_bucket_aligned) |>
+          dplyr::summarise(counts = dplyr::n(), .groups = "drop")
+      }) |>
+      dplyr::ungroup() |>
+      dplyr::rename(Scorecard = segment)
+    boot_psi <- dplyr::bind_rows(boot_all, boot_seg) |>
+      tidyr::separate(all_bucket_aligned, c("Lower_Range", "Upper_Range"), sep = " to ") |>
+      dplyr::mutate(Lower_Range = as.numeric(Lower_Range), Upper_Range = as.numeric(Upper_Range))
+    boot_joined <- dplyr::full_join(dev_pop, boot_psi,
+                                     by = c("Scorecard", "Lower_Range", "Upper_Range")) |>
+      dplyr::mutate(counts = dplyr::coalesce(counts, 0L))
+    boot_result <- compute_stability_index(boot_joined, epsilon = psi_epsilon)
+    tibble::tibble(group = boot_result$summary$Scorecard,
+                   value = boot_result$summary$SI_value)
+  },
+  B = 500
+)
+
+psi_summary <- psi_summary |>
+  dplyr::left_join(
+    psi_boot |> dplyr::select(group, ci_lower, ci_upper, B),
+    by = c("Scorecard" = "group")
+  ) |>
+  dplyr::mutate(
+    tier = dplyr::case_when(
+      Population_Stability_Index < 0.10 ~ "stable",
+      Population_Stability_Index <= 0.25 ~ "watch",
+      TRUE ~ "investigate"
+    ),
+    tier_certain = !(
+      (ci_lower < 0.10 & ci_upper >= 0.10) |
+      (ci_lower < 0.25 & ci_upper >= 0.25)
+    )
+  )
 
 psi_summary
 
@@ -448,6 +503,64 @@ csi_summary <- csi_summary_long |>
 
 csi_summary
 
+# --- CSI Bootstrap CI ---
+# Resample application rows ONCE per replicate; recompute all 5 features
+# from the same draw to preserve correlation structure.
+csi_boot_data <- csi_df |>
+  dplyr::mutate(Scorecard = as.character(as.numeric(segment)))
+
+csi_ci <- bootstrap_ci(
+  data      = csi_boot_data,
+  group_col = "Scorecard",
+  stat_fn   = function(df) {
+    all_results <- list()
+    for (fname in names(feature_breaks)) {
+      fb <- feature_breaks[[fname]]
+      vals <- df[[fname]]
+      if (fb$type == "continuous") {
+        bin_idx <- as.integer(cut(vals, breaks = fb$breaks, right = TRUE, include.lowest = TRUE))
+        n_bins <- length(fb$dev_counts)
+      } else {
+        bin_idx <- as.integer(factor(vals, levels = fb$levels))
+        n_bins <- length(fb$levels)
+      }
+      binned <- dplyr::tibble(Scorecard = df$Scorecard, bin_index = bin_idx)
+      agg <- dplyr::bind_rows(
+        binned |> dplyr::group_by(Scorecard, bin_index) |>
+          dplyr::summarise(counts = dplyr::n(), .groups = "drop"),
+        binned |> dplyr::mutate(Scorecard = "All Segments") |>
+          dplyr::group_by(Scorecard, bin_index) |>
+          dplyr::summarise(counts = dplyr::n(), .groups = "drop")
+      )
+      dev_ref <- dplyr::bind_rows(lapply(c("All Segments", as.character(0:4)), function(seg) {
+        dplyr::tibble(Scorecard = seg, bin_index = seq_len(n_bins), counts_dev = fb$dev_counts)
+      }))
+      joined <- dplyr::full_join(dev_ref, agg, by = c("Scorecard", "bin_index")) |>
+        dplyr::mutate(counts = dplyr::coalesce(counts, 0L))
+      result <- compute_stability_index(joined, epsilon = psi_epsilon)
+      for (i in seq_len(nrow(result$summary))) {
+        all_results[[length(all_results) + 1]] <- list(
+          group = paste0(result$summary$Scorecard[i], "::", fname),
+          value = result$summary$SI_value[i]
+        )
+      }
+    }
+    dplyr::bind_rows(all_results)
+  },
+  B = 500
+)
+
+# Parse compound group key back to Scorecard + feature
+csi_ci <- csi_ci |>
+  tidyr::separate(group, into = c("Scorecard", "feature"), sep = "::") |>
+  dplyr::left_join(
+    csi_summary_long |> dplyr::select(Scorecard, feature, estimate = SI_value),
+    by = c("Scorecard", "feature")
+  ) |>
+  dplyr::select(Scorecard, feature, estimate, ci_lower, ci_upper, B)
+
+csi_ci
+
 # Epsilon share
 csi_eps_share <- csi_summary_long |>
   dplyr::select(Scorecard, feature, epsilon_share) |>
@@ -478,6 +591,8 @@ purrr::walk(names(csi_results), function(fname) {
   openxlsx::addWorksheet(wb_csi, fname)
   openxlsx::writeDataTable(wb_csi, fname, tab_data)
 })
+openxlsx::addWorksheet(wb_csi, "ci")
+openxlsx::writeDataTable(wb_csi, "ci", csi_ci)
 openxlsx::saveWorkbook(wb_csi,
   here::here("output_files/csi_quarterly.xlsx"),
   overwrite = TRUE)
@@ -610,7 +725,65 @@ ks_comparison <- dplyr::inner_join(
 
 ks_comparison
 
+# --- KS Bootstrap CI ---
+ks_boot_t0 <- proc.time()
+ks_boot <- bootstrap_ci(
+  data      = ks_df |> dplyr::mutate(segment = as.character(segment)),
+  group_col = "segment",
+  stat_fn   = function(df) {
+    all_df <- dplyr::bind_rows(df, df |> dplyr::mutate(segment = "All Segments"))
+    ks <- all_df |>
+      dplyr::group_by(segment) |>
+      dplyr::group_modify(~ {
+        .x <- .x |> dplyr::arrange(dplyr::desc(prim_score)) |>
+          dplyr::mutate(decile = dplyr::ntile(dplyr::desc(prim_score), 10))
+        dec <- .x |> dplyr::group_by(decile) |>
+          dplyr::summarise(n = dplyr::n(), n_bads = sum(dq90), .groups = "drop") |>
+          dplyr::arrange(decile)
+        total_goods <- sum(dec$n - dec$n_bads)
+        total_bads <- sum(dec$n_bads)
+        if (total_bads == 0) return(tibble::tibble(ks_value = 0))
+        dec <- dec |>
+          dplyr::mutate(
+            cum_pct_good = cumsum(n - n_bads) / total_goods,
+            cum_pct_bad  = cumsum(n_bads) / total_bads,
+            ks_at_decile = abs(cum_pct_bad - cum_pct_good) * 100
+          )
+        tibble::tibble(ks_value = max(dec$ks_at_decile))
+      }) |>
+      dplyr::ungroup()
+    tibble::tibble(group = ks$segment, value = ks$ks_value)
+  },
+  B = 500
+)
+message("KS bootstrap: ", round((proc.time() - ks_boot_t0)[3], 1), "s")
+
+ks_comparison <- ks_comparison |>
+  dplyr::left_join(
+    ks_boot |> dplyr::select(group, ci_lower, ci_upper, B),
+    by = c("segment" = "group")
+  )
+
+ks_comparison
+
 # Decile bad rates
+# --- Decile bad-rate Wilson CI ---
+# Wilson intervals per decile INDEPENDENTLY. These describe each decile
+# alone, not the ten jointly. Comparing all nine adjacent pairs is nine
+# comparisons and will occasionally show a spurious gap. These are
+# screening intervals for triage, not hypothesis tests.
+decile_wilson <- wilson_ci(ks_result$decile_rates$n_bads, ks_result$decile_rates$n)
+ks_result$decile_rates <- ks_result$decile_rates |>
+  dplyr::mutate(ci_lower = decile_wilson$lower, ci_upper = decile_wilson$upper)
+
+stopifnot("Wilson CI lower bound negative" = all(ks_result$decile_rates$ci_lower >= 0))
+stopifnot("Wilson CI upper bound > 1" = all(ks_result$decile_rates$ci_upper <= 1))
+
+# Test case: segment 0 decile 1 (0 bads in 1538)
+seg0_d1 <- ks_result$decile_rates |> dplyr::filter(segment == "0", decile == 1)
+stopifnot("Wilson CI for 0/1538: lower should be ~0" = seg0_d1$ci_lower < 0.001)
+stopifnot("Wilson CI for 0/1538: upper should be ~0.0025" = abs(seg0_d1$ci_upper - 0.0024) < 0.001)
+
 ks_result$decile_rates
 
 # --- Cache ---

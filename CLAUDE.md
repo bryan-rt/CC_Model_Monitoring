@@ -4,12 +4,13 @@ Quarterly monitoring pipeline for a custom credit card application scorecard.
 Rebuilds production pipeline (DB2/Databricks) from OCR screenshots, rewired to
 Supabase (Postgres) with generic tables.
 
-Primary orchestrator: `orchestration_2.Rmd` (635 lines, 10 chunks).
-Validated frontier: line 635 (`# QC: Validated`) — VALIDATED: has run
+Primary orchestrator: `orchestration_2.Rmd` (800 lines, 10 chunks).
+Validated frontier: line 800 (`# QC: Validated`) — VALIDATED: has run
 against live Supabase (D5). psi_df: 30,500 rows (generated cohort), segments
-0-4. PSI + CSI + KS run clean through :631.
-  (anchor: :635 = `# QC: Validated` marker)
-  (anchor: :633 = `# QC: Completed` marker)
+0-4. PSI + CSI + KS + confidence intervals run clean through :796.
+CI bootstrap chunks add ~2 minutes to a full run (PSI 28s, CSI 63s, KS 29s).
+  (anchor: :800 = `# QC: Validated` marker)
+  (anchor: :798 = `# QC: Completed` marker)
 
 cohort_date (orchestration_2.Rmd:66-69): overridable parameter, defaults to
 current quarter. Set `cohort_date <- as.Date("YYYY-MM-DD")` before running
@@ -20,24 +21,34 @@ the setup chunk to select a different quarter.
 Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`,
 `scrub-rmd-credentials`, `create-supabase-tables`, `make-rmd-run-to-marker`,
 `build-psi-calculation`, `sample-data-generator`, `create-features-table`,
-`build-feature-breaks`, `build-csi-calculation`, `build-performance-table-and-ks`.
+`build-feature-breaks`, `build-csi-calculation`, `build-performance-table-and-ks`,
+`add-confidence-intervals`.
 Next sequence: round-trip test -> fix-orchestration-rmd.
 
-CSI (orchestration_2.Rmd:329-485) is fully built: pulls features, joins to PSI
+CSI (orchestration_2.Rmd:384-598) is fully built: pulls features, joins to PSI
 population, computes CSI per feature x segment using the shared
 `compute_stability_index()` helper in `R/compute_si.R` (D19). PSI chunk
-refactored to use the same helper. Outputs `csi_quarterly.xlsx` (5 tabs, one
-per feature) and `csi_summary` (6 segments x 5 features).
-  (anchor: :335 = CSI chunk opening fence `\`\`\`{r}`)
+refactored to use the same helper. Outputs `csi_quarterly.xlsx` (6 tabs: one
+per feature + ci tab) and `csi_summary` (6 segments x 5 features).
+  (anchor: :390 = CSI chunk opening fence `\`\`\`{r}`)
   (anchor: :268 = `source(here::here("R/compute_si.R"))` in PSI chunk)
 
-KS (orchestration_2.Rmd:495-631) is fully built: pulls 12-month-lagged
+KS (orchestration_2.Rmd:600-796) is fully built: pulls 12-month-lagged
 performance cohort (Q3 2025), joins to apps+scorecard for score and segment,
 computes KS and decile bad rates via `compute_ks_stats()` in `R/compute_ks.R`
 (D20). Compares to frozen dev baseline in `R/ks_baseline.R`. Outputs
 `ks_quarterly.xlsx` (2 tabs: ks_comparison, decile_rates).
-  (anchor: :495 = KS chunk opening fence `\`\`\`{r}`)
-  (anchor: :497 = `source(here::here("R/compute_ks.R"))` in KS chunk)
+  (anchor: :610 = KS chunk opening fence `\`\`\`{r}`)
+  (anchor: :612 = `source(here::here("R/compute_ks.R"))` in KS chunk)
+
+Confidence intervals (D21): PSI, CSI, KS use stratified percentile bootstrap
+(B=500, `R/bootstrap_ci.R`). Decile bad rates use Wilson score intervals
+(`R/wilson_ci.R`). PSI carries tier (stable/watch/investigate) and
+tier_certain (FALSE when CI spans a threshold).
+  (anchor: :318 = PSI bootstrap)
+  (anchor: :506 = CSI bootstrap)
+  (anchor: :728 = KS bootstrap)
+  (anchor: :770 = Wilson CI for decile bad rates)
 
 ## Pull function contracts
 
@@ -52,6 +63,8 @@ computes KS and decile bad rates via `compute_ks_stats()` in `R/compute_ks.R`
 | `get_performance_data(performance_window, write)` | `R/pull_performance.R` | data.frame: one row per user_ref_num. 3 columns: user_ref_num, origination_date, dq90 (INTEGER 0/1). Approved apps only. Writes `data/dq_12_mos/dq_12_mos_YYYYMM.txt.gz` if `write=T`. |
 | `compute_ks_stats(df, score_col, outcome_col, segment_col)` | `R/compute_ks.R` | list: `$ks_by_segment` (tibble: segment, ks_value 0-100, n_booked, n_bads), `$decile_rates` (tibble: segment, decile, n, n_bads, bad_rate, min_score, max_score, cum_pct_good, cum_pct_bad, ks_at_decile), `$min_bads_per_decile` (integer). Shared helper for KS computation (D20). Deciles re-derived per cohort (not frozen). |
 | `build_ks_baseline(seed)` | `R/build_ks_baseline.R` | Generates `R/ks_baseline.R` from dev cohort; validates monotonicity, KS targets (±1.5), min bads/decile (≥28) (D20). |
+| `wilson_ci(k, n, conf)` | `R/wilson_ci.R` | list: `$lower` (numeric vector), `$upper` (numeric vector). Vectorized Wilson score CI for binomial proportions (D21). |
+| `bootstrap_ci(data, group_col, stat_fn, B, conf, seed)` | `R/bootstrap_ci.R` | tibble: group, ci_lower, ci_upper, B. Stratified percentile bootstrap (D21). stat_fn(df) must return tibble with group and value columns. Own RNG stream at seed+3000L. |
 
 ## Supabase tables
 
@@ -72,7 +85,7 @@ Schema: `sql/01_create_tables.sql`, `sql/03_create_features_table.sql`, `sql/04_
 
 | What | Where |
 |---|---|
-| Decisions (D1-D20) | `.claude/docs/decisions.md` |
+| Decisions (D1-D21) | `.claude/docs/decisions.md` |
 | Pass artifacts | `.claude/passes/<task-name>/` |
 | R script catalog | `R/CATALOG.md` |
 | Project catalog | `CATALOG.md` |
