@@ -53,6 +53,12 @@ segment_breaks <- list(
 segment_volumes <- c("0" = 5500L, "1" = 8000L, "2" = 6000L,
                      "3" = 5500L, "4" = 5500L)
 
+# --- Per-segment approval rates (D20) ---
+# Segments have different risk profiles; approval rates reflect underwriting
+# standards. Applied to ALL quarters — not just the mature quarter.
+approval_rates <- c("0" = 0.85, "1" = 0.70, "2" = 0.60,
+                    "3" = 0.40, "4" = 0.55)
+
 # --- Feature definitions (D17) ---
 # type: "continuous" (quantile bins, uniform dev) or "categorical" (level set,
 #   non-uniform dev). tilt_dir: +1 boosts first element, -1 boosts last.
@@ -161,6 +167,90 @@ generate_feature_values <- function(fdef, counts) {
     vals <- rep(fdef$levels, times = counts)
   }
   vals[sample(length(vals))]
+}
+
+# --- Logistic bad-rate model (D20) ---
+# P(dq90=1 | score) = 1/(1+exp(-(a + b*score))) [+ bump_fn(score)]
+# b < 0: higher score = lower risk.
+# solve_ks_slope finds b such that compute_ks_stats() reports target KS,
+# with a inner-solved to hit target bad rate. Uses the SAME KS definition
+# as the Rmd (decile-grid KS via compute_ks_stats), not full-resolution.
+
+solve_intercept <- function(scores, b, target_br, bump_vals = NULL) {
+  # Bisect on a to match mean(P_i) = target_br
+  lo <- -20; hi <- 20
+  for (iter in seq_len(200)) {
+    mid <- (lo + hi) / 2
+    p <- 1 / (1 + exp(-(mid + b * scores)))
+    if (!is.null(bump_vals)) p <- pmin(p + bump_vals, 1)
+    br <- mean(p)
+    if (abs(br - target_br) < 1e-6) return(mid)
+    if (br < target_br) lo <- mid else hi <- mid
+  }
+  mid
+}
+
+solve_ks_slope <- function(scores, segments, target_br, target_ks,
+                           bump_fn = NULL, tol = 0.3,
+                           require_monotonic = FALSE) {
+  # Outer bisection on b; inner solve for a; KS via compute_ks_stats().
+  # Returns list(a, b, achieved_br, achieved_ks, dq90) — the dq90 vector
+  # from the best iteration is returned so the caller uses the SAME draw
+  # that achieved the reported KS, rather than drawing fresh.
+  #
+  # require_monotonic: if TRUE, only accept draws where decile bad rates
+  # are non-decreasing. With Bernoulli draws, small inversions are common;
+  # this retries until a monotonic draw is found within tolerance.
+  source(here::here("R/compute_ks.R"))
+  lo_b <- -0.05; hi_b <- -0.0001
+  best <- list(a = NA, b = NA, achieved_br = NA, achieved_ks = NA,
+               dq90 = NULL, gap = Inf)
+
+  for (iter in seq_len(80)) {
+    mid_b <- (lo_b + hi_b) / 2
+    bump_vals <- if (!is.null(bump_fn)) bump_fn(scores) else NULL
+    a <- solve_intercept(scores, mid_b, target_br, bump_vals)
+    p <- 1 / (1 + exp(-(a + mid_b * scores)))
+    if (!is.null(bump_vals)) p <- pmin(p + bump_vals, 1)
+
+    # Try multiple draws at this (a, b) to find one that meets constraints
+    n_draws <- if (require_monotonic) 20L else 1L
+    for (d in seq_len(n_draws)) {
+      dq90 <- rbinom(length(scores), 1, p)
+      tmp_df <- data.frame(prim_score = scores, dq90 = dq90,
+                           segment = segments, stringsAsFactors = FALSE)
+      seg_name <- segments[1]
+      ks_res <- compute_ks_stats(tmp_df)
+      achieved_ks <- ks_res$ks_by_segment$ks_value[
+        ks_res$ks_by_segment$segment == seg_name]
+      achieved_br <- mean(dq90)
+
+      # Check monotonicity if required
+      if (require_monotonic) {
+        dr <- ks_res$decile_rates[ks_res$decile_rates$segment == seg_name, ]
+        dr <- dr[order(dr$decile), ]
+        if (any(diff(dr$bad_rate) < 0)) next
+      }
+
+      gap <- abs(achieved_ks - target_ks)
+      if (gap < best$gap) {
+        best <- list(a = a, b = mid_b, achieved_br = achieved_br,
+                     achieved_ks = achieved_ks, dq90 = dq90, gap = gap)
+      }
+      break
+    }
+
+    if (best$gap < tol) break
+    if (achieved_ks < target_ks) hi_b <- mid_b else lo_b <- mid_b
+  }
+  best
+}
+
+# --- Gaussian bump for segment 0 monotonicity break (D20) ---
+# Adds localized extra bad-rate probability in deciles 4-6 score range.
+# mu = center of the mid-score band, h = bump height, sigma = width.
+make_bump_fn <- function(mu, h, sigma) {
+  function(scores) h * exp(-((scores - mu)^2) / (2 * sigma^2))
 }
 
 # --- Generate dates spread across 3 months of a quarter ---
@@ -356,13 +446,26 @@ generate_cohort <- function(
     dt_entered <- generate_dates(n_total, quarter_start)
     all_rows$dt_entered <- dt_entered
 
-    # --- Filler columns (not load-bearing for PSI) ---
-    decisions <- sample(
-      c("Approve", "Decline", "Void", "Withdraw", "Pending"),
-      n_total, replace = TRUE, prob = c(0.60, 0.20, 0.05, 0.05, 0.10)
+    # --- Segment-aware approval (D20) ---
+    # Per-segment approval rates; non-Approve outcomes split at 53/13/13/21%
+    # (preserves relative ratios from the original 20/5/5/10 split).
+    # Rows with NA segment (noise) use blended rate 0.626.
+    seg_rate <- ifelse(
+      is.na(all_rows$segment),
+      0.626,
+      approval_rates[all_rows$segment]
     )
+    approve_draw <- runif(n_total) < seg_rate
+    non_approve <- sample(
+      c("Decline", "Void", "Withdraw", "Pending"),
+      n_total, replace = TRUE,
+      prob = c(0.53, 0.13, 0.13, 0.21)
+    )
+    decisions <- ifelse(approve_draw, "Approve", non_approve)
     all_rows$decision <- decisions
-    all_rows$applied <- ifelse(decisions == "Approve", 1L, 0L)
+    # applied = 1 for all rows: everyone in an applications table applied for
+    # credit. The decision column records the outcome, not whether they applied.
+    all_rows$applied <- 1L
     all_rows$strategy_version <- sample(
       c("V2.0", "V2.1"), n_total, replace = TRUE, prob = c(0.3, 0.7)
     )
@@ -581,5 +684,333 @@ generate_cohort <- function(
     }
   }
 
-  list(apps = apps, scorecard = scorecard, features = features, meta = meta)
+  # --- Phase 3: Mature quarter Q3 2025 (D20) ---
+  # 12-month-lagged cohort for KS/rank ordering. 3x volume for stable deciles.
+  # Uses seed + 2000L: structural isolation from the PSI/CSI quarters.
+  # PSI/CSI are RNG-invariant (D17) so this is architectural hygiene, not
+  # a requirement.
+  set.seed(seed + 2000L)
+
+  mature_volumes <- segment_volumes * 3L
+  mature_quarter_start <- "2025-07-01"
+
+  # --- Dev bad-rate targets (pure logistic, monotonic deciles) ---
+  dev_br_targets <- c("0" = 0.020, "1" = 0.045, "2" = 0.070,
+                      "3" = 0.120, "4" = 0.065)
+  dev_ks_targets <- c("0" = 42, "1" = 40, "2" = 38, "3" = 35, "4" = 28)
+
+  # --- Current bad-rate targets (seg 0 degraded + bump) ---
+  cur_br_targets <- c("0" = 0.021, "1" = 0.047, "2" = 0.064,
+                      "3" = 0.124, "4" = 0.067)
+  cur_ks_targets <- c("0" = 33, "1" = 39, "2" = 37, "3" = 34, "4" = 25)
+
+  # --- Generate mature quarter apps + scorecard (reuse loop body) ---
+  mature_core_list <- vector("list", length(mature_volumes))
+  for (s_idx in seq_along(mature_volumes)) {
+    seg_name <- names(mature_volumes)[s_idx]
+    N <- mature_volumes[s_idx]
+    brks <- segment_breaks[[seg_name]]
+    # Flat distribution (alpha = 0, pre-drift)
+    weights <- rep(1 / 20, 20)
+    bin_counts <- deterministic_allocate(N, weights)
+    scores <- unlist(lapply(seq_along(bin_counts), function(i) {
+      scores_in_bin(bin_counts[i], brks, i)
+    }))
+    mature_core_list[[s_idx]] <- data.frame(
+      prim_score = as.numeric(scores),
+      segment = seg_name,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  mature_core <- do.call(rbind, mature_core_list)
+  rownames(mature_core) <- NULL
+  n_mature_core <- nrow(mature_core)
+
+  # Noise rows (same proportions as main loop)
+  n_sec_msc_m <- round(n_mature_core * 0.08)
+  n_sec_m <- round(n_sec_msc_m * 0.6)
+  n_msc_m <- n_sec_msc_m - n_sec_m
+  n_null_score_m <- round(n_mature_core * 0.04)
+  n_no_match_m <- round(n_mature_core * 0.04)
+  n_null_seg_m <- 150L
+
+  sec_msc_m <- data.frame(
+    prim_score = as.numeric(sample(100L:450L, n_sec_msc_m, replace = TRUE)),
+    segment = sample(as.character(0:4), n_sec_msc_m, replace = TRUE),
+    client_product_cd = c(rep("SEC", n_sec_m), rep("MSC", n_msc_m)),
+    has_scorecard = TRUE, stringsAsFactors = FALSE
+  )
+  null_score_m <- data.frame(
+    prim_score = rep(NA_real_, n_null_score_m),
+    segment = sample(as.character(0:4), n_null_score_m, replace = TRUE),
+    client_product_cd = rep("CC", n_null_score_m),
+    has_scorecard = TRUE, stringsAsFactors = FALSE
+  )
+  no_match_m <- data.frame(
+    prim_score = as.numeric(sample(100L:450L, n_no_match_m, replace = TRUE)),
+    segment = rep(NA_character_, n_no_match_m),
+    client_product_cd = rep("CC", n_no_match_m),
+    has_scorecard = FALSE, stringsAsFactors = FALSE
+  )
+  null_seg_m <- data.frame(
+    prim_score = as.numeric(sample(100L:450L, n_null_seg_m, replace = TRUE)),
+    segment = rep(NA_character_, n_null_seg_m),
+    client_product_cd = rep("CC", n_null_seg_m),
+    has_scorecard = TRUE, stringsAsFactors = FALSE
+  )
+
+  mature_core$client_product_cd <- sample(
+    c("CC", "PLAT", "GOLD"), n_mature_core, replace = TRUE,
+    prob = c(0.93, 0.05, 0.02)
+  )
+  mature_core$has_scorecard <- TRUE
+
+  mature_all <- rbind(mature_core, sec_msc_m, null_score_m, no_match_m, null_seg_m)
+  n_mature_total <- nrow(mature_all)
+  mature_all <- mature_all[sample(n_mature_total), ]
+
+  # IDs
+  mature_urns <- sprintf("%014.0f", next_urn + seq_len(n_mature_total) - 1)
+  next_urn <- next_urn + n_mature_total
+  mature_app_nums <- seq.int(next_app_num, length.out = n_mature_total)
+  next_app_num <- next_app_num + n_mature_total
+  mature_all$user_ref_num <- mature_urns
+  mature_all$app_num <- mature_app_nums
+
+  # Dates
+  mature_all$dt_entered <- generate_dates(n_mature_total, mature_quarter_start)
+
+  # Per-segment approval
+  seg_rate_m <- ifelse(
+    is.na(mature_all$segment),
+    0.626,
+    approval_rates[mature_all$segment]
+  )
+  approve_draw_m <- runif(n_mature_total) < seg_rate_m
+  non_approve_m <- sample(
+    c("Decline", "Void", "Withdraw", "Pending"),
+    n_mature_total, replace = TRUE,
+    prob = c(0.53, 0.13, 0.13, 0.21)
+  )
+  mature_all$decision <- ifelse(approve_draw_m, "Approve", non_approve_m)
+  mature_all$applied <- 1L
+
+  # Filler columns
+  mature_all$strategy_version <- sample(
+    c("V2.0", "V2.1"), n_mature_total, replace = TRUE, prob = c(0.3, 0.7)
+  )
+  credit_lims_m <- round(runif(n_mature_total, 1000, 15000), -2)
+  credit_lims_m[mature_all$decision %in% c("Decline", "Void")] <- NA
+  mature_all$assigned_credit_lim <- credit_lims_m
+  mature_all$lao_credit_lmt <- credit_lims_m
+  mature_all$org_paper_type <- sample(
+    c("ELECTRONIC", "PAPER"), n_mature_total, replace = TRUE, prob = c(0.85, 0.15)
+  )
+  mature_all$fico_score <- as.numeric(sample(500L:850L, n_mature_total, replace = TRUE))
+  mature_all$bureau_used <- sample(
+    c("EXP", "TU", "EQ"), n_mature_total, replace = TRUE, prob = c(0.4, 0.35, 0.25)
+  )
+  mature_all$acq <- sample(
+    c("WEB", "BRANCH"), n_mature_total, replace = TRUE, prob = c(0.80, 0.20)
+  )
+
+  # Build apps data frame
+  mature_apps <- data.frame(
+    app_num = mature_all$app_num, user_ref_num = mature_all$user_ref_num,
+    dt_entered = mature_all$dt_entered,
+    client_product_cd = mature_all$client_product_cd,
+    strategy_version = mature_all$strategy_version,
+    assigned_credit_lim = mature_all$assigned_credit_lim,
+    decision = mature_all$decision, applied = mature_all$applied,
+    org_paper_type = mature_all$org_paper_type,
+    lao_credit_lmt = mature_all$lao_credit_lmt,
+    fico_score = mature_all$fico_score,
+    bureau_used = mature_all$bureau_used,
+    acq = mature_all$acq, prim_score = mature_all$prim_score,
+    stringsAsFactors = FALSE
+  )
+
+  # Build scorecard data frame
+  sc_mask_m <- mature_all$has_scorecard
+  sc_rows_m <- mature_all[sc_mask_m, ]
+  n_sc_m <- nrow(sc_rows_m)
+  sq_nums_m <- seq.int(next_sq_num, length.out = n_sc_m)
+  next_sq_num <- next_sq_num + n_sc_m
+  proc_dates_m <- sc_rows_m$dt_entered + sample(0:2, n_sc_m, replace = TRUE)
+  null_proc_m <- sample(n_sc_m, round(n_sc_m * 0.05))
+  proc_dates_m[null_proc_m] <- NA
+  primemdt_m <- rep(NA_character_, n_sc_m)
+  primemdt_idx_m <- sample(n_sc_m, round(n_sc_m * 0.05))
+  primemdt_m[primemdt_idx_m] <- format(
+    sc_rows_m$dt_entered[primemdt_idx_m] - sample(30:365, length(primemdt_idx_m), replace = TRUE),
+    "%Y-%m-%d"
+  )
+  mature_scorecard <- data.frame(
+    sq_num = sq_nums_m, user_ref_num = sc_rows_m$user_ref_num,
+    score = as.numeric(sample(400L:850L, n_sc_m, replace = TRUE)),
+    segment = sc_rows_m$segment,
+    actduty = sample(c("Y", "N"), n_sc_m, replace = TRUE, prob = c(0.05, 0.95)),
+    trans_date_ct = sc_rows_m$dt_entered,
+    proc_date_ct = proc_dates_m, primemdt = primemdt_m,
+    stringsAsFactors = FALSE
+  )
+
+  # Append mature quarter to main tables
+  apps <- rbind(apps, mature_apps)
+  scorecard <- rbind(scorecard, mature_scorecard)
+
+  # --- Generate performance data for APPROVED mature-quarter apps ---
+  approved_mask <- mature_apps$decision == "Approve" &
+                   !is.na(mature_apps$prim_score)
+
+  # Need segment for approved apps
+  approved_apps <- mature_apps[approved_mask, ]
+  seg_lookup <- setNames(mature_scorecard$segment, mature_scorecard$user_ref_num)
+  approved_seg <- seg_lookup[approved_apps$user_ref_num]
+  # Keep only rows with known segment (core + some noise)
+  keep <- !is.na(approved_seg)
+  approved_apps <- approved_apps[keep, ]
+  approved_seg <- approved_seg[keep]
+
+  # Solve logistic parameters per segment and generate dq90
+  perf_list <- vector("list", length(segment_volumes))
+  perf_meta <- list()
+
+  # Segment 0 bump: centered at mid-range of segment 0 scores
+  # Segment 0 breaks: 100-450, scores cluster around deciles 4-6 (~200-280)
+  seg0_bump <- make_bump_fn(mu = 240, h = 0.025, sigma = 30)
+
+  for (s_idx in seq_along(segment_volumes)) {
+    seg_name <- names(segment_volumes)[s_idx]
+    seg_mask <- approved_seg == seg_name
+    seg_scores <- approved_apps$prim_score[seg_mask]
+
+    bump_fn <- if (seg_name == "0") seg0_bump else NULL
+
+    # Segments 1-4: require monotonic deciles. Segment 0: bump breaks monotonicity.
+    result_ks <- solve_ks_slope(
+      scores = seg_scores,
+      segments = rep(seg_name, length(seg_scores)),
+      target_br = cur_br_targets[seg_name],
+      target_ks = cur_ks_targets[seg_name],
+      bump_fn = bump_fn,
+      require_monotonic = (seg_name != "0")
+    )
+
+    # Use the solver's own dq90 draw — same draw that achieved the reported KS
+    dq90 <- result_ks$dq90
+
+    perf_list[[s_idx]] <- data.frame(
+      user_ref_num = approved_apps$user_ref_num[seg_mask],
+      origination_date = approved_apps$dt_entered[seg_mask],
+      dq90 = dq90,
+      stringsAsFactors = FALSE
+    )
+
+    perf_meta[[seg_name]] <- list(
+      a = result_ks$a, b = result_ks$b,
+      achieved_br = mean(dq90), achieved_ks = result_ks$achieved_ks,
+      target_br = cur_br_targets[seg_name],
+      target_ks = cur_ks_targets[seg_name],
+      n_booked = length(seg_scores), n_bads = sum(dq90)
+    )
+  }
+
+  performance <- do.call(rbind, perf_list)
+  rownames(performance) <- NULL
+
+  message("\nMature quarter Q3 2025:")
+  message(sprintf("  apps=%d, scorecard=%d, performance=%d",
+                  nrow(mature_apps), nrow(mature_scorecard), nrow(performance)))
+  for (seg in names(perf_meta)) {
+    m <- perf_meta[[seg]]
+    message(sprintf("  seg %s: b=%.5f BR=%.3f%% (target %.1f%%) KS=%.1f (target %.0f) bads=%d booked=%d",
+                    seg, m$b, m$achieved_br * 100, m$target_br * 100,
+                    m$achieved_ks, m$target_ks, m$n_bads, m$n_booked))
+  }
+
+  # --- Phase 4: Development cohort (D20) ---
+  # Labeled dev cohort for the frozen KS baseline. Pure logistic (no bump) →
+  # monotonic deciles guaranteed. Generated through the same mechanisms as the
+  # mature quarter so "the baseline came from the same code path" is literally
+  # true. Not inserted into any database table.
+  set.seed(seed + 3000L)
+
+  dev_core_list <- vector("list", length(mature_volumes))
+  for (s_idx in seq_along(mature_volumes)) {
+    seg_name <- names(mature_volumes)[s_idx]
+    N <- mature_volumes[s_idx]
+    brks <- segment_breaks[[seg_name]]
+    weights <- rep(1 / 20, 20)
+    bin_counts <- deterministic_allocate(N, weights)
+    scores <- unlist(lapply(seq_along(bin_counts), function(i) {
+      scores_in_bin(bin_counts[i], brks, i)
+    }))
+    dev_core_list[[s_idx]] <- data.frame(
+      prim_score = as.numeric(scores),
+      segment = seg_name,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  dev_core <- do.call(rbind, dev_core_list)
+  rownames(dev_core) <- NULL
+
+  # Apply same approval filter (same population shape as current)
+  dev_approve_prob <- approval_rates[dev_core$segment]
+  dev_approved <- runif(nrow(dev_core)) < dev_approve_prob
+  dev_booked <- dev_core[dev_approved, ]
+
+  # Solve dev logistic per segment and generate dq90
+  dev_perf_list <- vector("list", length(segment_volumes))
+  dev_meta <- list()
+
+  for (s_idx in seq_along(segment_volumes)) {
+    seg_name <- names(segment_volumes)[s_idx]
+    seg_mask <- dev_booked$segment == seg_name
+    seg_scores <- dev_booked$prim_score[seg_mask]
+
+    result_dev <- solve_ks_slope(
+      scores = seg_scores,
+      segments = rep(seg_name, length(seg_scores)),
+      target_br = dev_br_targets[seg_name],
+      target_ks = dev_ks_targets[seg_name],
+      bump_fn = NULL,
+      require_monotonic = TRUE
+    )
+
+    # Use the solver's own dq90 draw
+    dq90 <- result_dev$dq90
+
+    dev_perf_list[[s_idx]] <- data.frame(
+      user_ref_num = paste0("DEV_", seq_along(seg_scores)),
+      prim_score = seg_scores,
+      segment = seg_name,
+      dq90 = dq90,
+      stringsAsFactors = FALSE
+    )
+
+    dev_meta[[seg_name]] <- list(
+      a = result_dev$a, b = result_dev$b,
+      achieved_br = mean(dq90), achieved_ks = result_dev$achieved_ks,
+      target_br = dev_br_targets[seg_name],
+      target_ks = dev_ks_targets[seg_name],
+      n_booked = length(seg_scores), n_bads = sum(dq90)
+    )
+  }
+
+  dev_cohort <- do.call(rbind, dev_perf_list)
+  rownames(dev_cohort) <- NULL
+
+  message("\nDev cohort:")
+  for (seg in names(dev_meta)) {
+    m <- dev_meta[[seg]]
+    message(sprintf("  seg %s: b=%.5f BR=%.3f%% (target %.1f%%) KS=%.1f (target %.0f) bads=%d booked=%d",
+                    seg, m$b, m$achieved_br * 100, m$target_br * 100,
+                    m$achieved_ks, m$target_ks, m$n_bads, m$n_booked))
+  }
+
+  list(apps = apps, scorecard = scorecard, features = features,
+       performance = performance, dev_cohort = dev_cohort, meta = meta)
 }
