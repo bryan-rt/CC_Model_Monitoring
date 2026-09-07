@@ -110,6 +110,14 @@ Identical to pre-feature-generation values.
 
 ### CSI achieved vs target (core population only, VERIFIED)
 
+**2026-09-07 NOTE (D24):** These values were verified against the generator
+output on Sep 6. The D20 regeneration (Sep 7) invalidated the Q4 and Q2
+cached feature files without re-pulling them. The Q2 numbers below (e.g.,
+seg0 feature_1 = 0.1398) were TRUE when run but the cached files subsequently
+read by the Rmd contained stale data producing CSI ~0.045 instead of ~0.14.
+See `.claude/passes/build-report-visuals/csi-q2-diagnosis.md` for the full
+root-cause analysis. Fixed: stale files deleted and re-pulled.
+
 Max |delta| = 0.0011. All 100 cells within 0.002 of target.
 
 **Q4 2025 (all zero — self-test):** All 25 cells exactly 0.0000. PASS.
