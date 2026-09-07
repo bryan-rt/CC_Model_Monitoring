@@ -62,12 +62,22 @@ B = 500, seed = 20260907 + 3000.
 | 4 | 0.1498 | 0.1328 | 0.1752 | watch | TRUE |
 | All Segments | 0.0835 | 0.0779 | 0.0896 | stable | TRUE |
 
+**Headline result -- segment 2:** PSI 0.250 sits exactly on the investigate
+threshold. Without the interval, this quarter's report would escalate to
+investigation. The CI [0.227, 0.279] spans the 0.25 boundary -- watch and
+investigate cannot be distinguished on this quarter's data alone. The correct
+report reads: "segment 2 is at the boundary; confirm next quarter before
+escalating." This is a governance decision changed by the uncertainty
+estimate: investigation carries cost (model review, regulatory documentation),
+and the point estimate alone does not justify it.
+
 **tier_certain = FALSE for segments 1 and 2:**
+- Segment 2: PSI 0.250, CI [0.227, 0.279] spans the 0.25 threshold. Without
+  the CI, this reads "investigate." With it: "boundary -- defer escalation to
+  next quarter."
 - Segment 1: PSI 0.090, CI [0.080, 0.104] spans the 0.10 threshold. "Reads
   stable, but the interval reaches watch -- cannot call it stable on this
   quarter alone."
-- Segment 2: PSI 0.250, CI [0.227, 0.279] spans the 0.25 threshold. "Reads
-  at the watch/investigate boundary; the interval reaches both sides."
 
 Expected per task brief: segment 0 PSI ~0.30, CI ~[0.275, 0.335]. Achieved:
 [0.275, 0.335]. Exact match.
@@ -234,3 +244,18 @@ All expected values from the task brief matched:
 - [x] CLAUDE.md, decisions.md (D21), R/CATALOG.md updated
 - [x] 3-execute.md written
 - [x] Branch pass3/add-confidence-intervals, pushed
+
+## Important caveat: what the bootstrap CI does and does not measure
+
+The bootstrap CI measures SAMPLING variability of the metric given the
+observed cohort: "if a real quarter with this shape had rolled differently,
+how much would this number move?" This is the question a production
+monitoring report actually faces.
+
+It does NOT predict what happens if the cohort is regenerated.
+`generate_cohort.R` uses `deterministic_allocate()`, so regenerating the
+cohort produces identical per-segment numbers -- zero variability by
+construction. Anyone testing the CI by regenerating will get identical
+values and a zero-width interval. This is correct behavior (the generator
+is deterministic), not a CI defect. The CI code does not reference the
+generator and would work identically against a real bank's data.

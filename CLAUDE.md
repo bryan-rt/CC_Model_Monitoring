@@ -8,6 +8,7 @@ Primary orchestrator: `orchestration_2.Rmd` (800 lines, 10 chunks).
 Validated frontier: line 800 (`# QC: Validated`) — VALIDATED: has run
 against live Supabase (D5). psi_df: 30,500 rows (generated cohort), segments
 0-4. PSI + CSI + KS + confidence intervals run clean through :796.
+CI bootstrap chunks add ~2 minutes to a full run (PSI 28s, CSI 63s, KS 29s).
   (anchor: :800 = `# QC: Validated` marker)
   (anchor: :798 = `# QC: Completed` marker)
 
