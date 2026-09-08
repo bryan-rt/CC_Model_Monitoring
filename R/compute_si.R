@@ -22,13 +22,17 @@ compute_stability_index <- function(joined_df, epsilon = 0.0001) {
     dplyr::mutate(
       segment_total   = sum(counts),
       percent_dev     = counts_dev / sum(counts_dev),
+
+      # QUESTION: Why not have these two if_else statements as a singular case statement so the variable is defined once?
       percent_current = dplyr::if_else(
         segment_total == 0,
         epsilon,
         counts / segment_total
       ),
       percent_current = dplyr::if_else(
-        percent_current == 0, epsilon, percent_current
+        percent_current == 0,
+        epsilon,
+        percent_current
       ),
       epsilon_floored = (counts == 0 & segment_total > 0),
       epsilon_only    = segment_total == 0
@@ -50,6 +54,7 @@ compute_stability_index <- function(joined_df, epsilon = 0.0001) {
       `Population Divergence (K-L)` = `Difference (B-A)` * `Log of Proportion (B/A)`
     )
 
+  # QUESTION: What would cause these NaN or Inf occurances?
   stopifnot("Inf or NaN in Population Divergence (K-L)" =
               all(is.finite(si_data$`Population Divergence (K-L)`)))
 
@@ -66,6 +71,7 @@ compute_stability_index <- function(joined_df, epsilon = 0.0001) {
     dplyr::group_split()
   names(si_list) <- purrr::map_chr(si_list, ~ .x$Scorecard[1])
 
+  # Addition of 'Totals' row to each segment
   si_list <- purrr::map(si_list, function(tbl) {
     totals_row <- tibble::tibble(
       Scorecard                       = tbl$Scorecard[1],

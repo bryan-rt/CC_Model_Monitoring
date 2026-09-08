@@ -7,6 +7,8 @@
 # stat_fn(resampled_df) must return a data.frame with columns
 # `group` (character) and `value` (numeric). One row per group.
 
+# QUESTION: Do I call this the 95% percentile confidence window because conf = 0.95? When and why would we change the value?
+
 bootstrap_ci <- function(data, group_col, stat_fn,
                          B = 500, conf = 0.95, seed = 20260907) {
   set.seed(seed + 3000L)
@@ -17,7 +19,7 @@ bootstrap_ci <- function(data, group_col, stat_fn,
   group_names <- baseline$group
   n_groups <- length(group_names)
 
-  # Split by resampling stratum
+  # Split by resampling group
   groups <- split(data, data[[group_col]])
 
   # Collect B replicates

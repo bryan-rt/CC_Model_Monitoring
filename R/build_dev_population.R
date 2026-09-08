@@ -58,5 +58,6 @@ build_dev_population <- function(output_path) {
   fs::dir_create(dirname(output_path))
   data.table::fwrite(dev_pop, output_path, scipen = 999)
 
+  # QUESTION: What is invisible and why don't we use rm()?
   invisible(dev_pop)
 }
