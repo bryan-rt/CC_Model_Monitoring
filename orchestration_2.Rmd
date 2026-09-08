@@ -8,6 +8,10 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = "~/Desktop/Professional/Projects/CC_Model_Monitoring")
+# Clean slate: prevents objects from a previous cohort_date persisting across
+# an interactive re-run. Knit starts fresh; this protects "Run All Chunks".
+# NOTE: cohort_date must be overridden IN-FILE (line below), not at the console.
+rm(list = ls())
 here::i_am("orchestration_2.Rmd")
 ```
 
@@ -71,10 +75,6 @@ if (!exists("cohort_date")) {
 }
 backfilling_date <- cohort_date %m-% months(6)
 
-# Gates which R methodologies can/cannot, wired into logic starting [checkpoint 5
-ks_methods <- c('live', 'fixed', 'true')
-stopifnot(all(unlist(ks_methods %in% c('live', 'fixed', 'true'))))
-
 source('R/pull_apps.R')
 source('R/function_cc_scorecard_data.R')
 source('R/pull_features.R')
@@ -88,7 +88,6 @@ This section checks for required directories and creates them if missing. Run on
 **Note** — after folder creation, copy any required data files into the local `data/` directory to preserve file pointers.
 
 ```{r, echo=FALSE}
-#------------------------------- Folder Structure ---------------------------------
 fs::dir_create(c('data', 'data/apps', 'data/scorecard', 'data/features', 'data/dq_12_mos'))
 fs::dir_create(c('output_files', 'output_files/quarterly_stats',
                  'output_files/quarterly_stats/PSI',
@@ -103,7 +102,12 @@ PSI and CSI evaluate the most recent window of through the door (TTD) applicatio
 
 ## PSI
 
-The chunk below pulls the most recent Starters application and scorecard data from PATH if it is not already held within the local repository and writes the data as a .txt.gz file. This allows us to avoid repetitious pulls when looking over windows or different report iterations.
+PSI and CSI evaluate the current quarter's through-the-door applications —
+the model's input distribution. Performance metrics (KS, DQ90) use a
+different cohort; see the KS section for the two-cohort rationale.
+
+Pull the current quarter's scorecard and application data from Supabase (or
+read from local cache if already present) and write gzipped CSVs to `data/`.
 
 ```{r}
 
@@ -140,11 +144,11 @@ if(length(paths) != 3){
                               return(df)
                               })
 }
-
-gc()
 ```
 
-This section pulls in the most recent quarter of application and scorecard data and uses predefined custom score ranges to set PSI bins in accordance with the model development population.
+Read the cached scorecard and application files, join them, filter to the
+scored population, and bin scores into frozen development-population vigintiles
+for PSI comparison.
 
 ```{r}
 number_of_month_window <- 3
@@ -249,23 +253,8 @@ proportion, and population divergence. Split into 6 tibbles (All Segments + 0-4)
 and write to a cached xlsx with one tab per segment.
 
 ```{r}
-# --- PENDING REBUILD: refit range tables ---
-# Originally :240-399 loaded development population from external xlsx files
-# (loan_and_cd_event_DEFAULT.xlsx, refit_Development_est_bin.xlsx) and
-# constructed: ranges_refit, ranges_refit_plt, ranges_refit3, pol_data, ranges.
-#
-# Downstream status:
-#   ranges_refit_pol  — read at :2031 (dt_ks_bins_pol = ranges_refit_pol |>).
-#                       Genuine orphan: ranges_refit_pol is never assigned
-#                       anywhere in the file (OCR loss). KS task must rebuild.
-#   ranges            — reassigned at :518, :542, :554 before any post-:453 read.
-#                       Commenting :385 (ranges <- ranges_refit) costs nothing.
-#   ranges_refit_plt  — zero reads after :453. Dead object.
-#   ranges_refit3     — zero reads after :453. Dead object.
-#   pol_data          — zero reads after :445. Dead object.
-#
-# Not required for PSI; will be rebuilt in the KS task.
-# ---------------------------------------------------------------------------
+# The original pipeline loaded development references from external xlsx.
+# That function is now R/build_dev_population.R (and R/ks_baseline.R for KS).
 
 # --- PSI Calculation ---
 # Load shared stability index helper and development population reference
@@ -301,10 +290,7 @@ stopifnot("Dev percentages are not all 5%" = all(dev_pcts == 0.05))
 # Compute stability index (shared helper — also used by CSI)
 psi_result <- compute_stability_index(psi_joined, epsilon = psi_epsilon)
 
-# Restore PSI column selection and order for downstream compatibility.
-# Downstream formatters at :737 read psi_data back FROM the xlsx cache.
-# openxlsx::read.xlsx applies make.names(): Lower_Range -> Lower.Range.
-# This is a known transformation; the formatter must account for it.
+# Stable column order for diffable xlsx output across quarterly runs.
 psi_col_order <- c("Scorecard", "Lower_Range", "Upper_Range", "counts_dev",
                    "counts", "percent_dev", "percent_current",
                    "Difference (B-A)", "Proportion (B/A)",
@@ -411,7 +397,7 @@ population.
 source(here::here("R/feature_breaks.R"))
 fs::dir_create(here::here("data/features"))
 
-# Pull + cache (mirrors apps/scorecard pattern at :103-137)
+# Pull + cache (mirrors apps/scorecard pull pattern above)
 feat_paths <- fs::dir_ls("data/features")[which(
   basename(fs::dir_ls("data/features")) %in% c(
     glue::glue("features_{format(as.Date(cohort_date), '%Y%m')}.txt.gz"),
@@ -662,7 +648,7 @@ source(here::here("R/ks_baseline.R"))
 # Performance cohort: 12 months prior to current quarter
 perf_date <- cohort_date %m-% months(12)
 
-# Pull + cache performance data (3 months, mirrors apps pattern at :104)
+# Pull + cache performance data (3 months, mirrors apps pull pattern above)
 perf_paths <- fs::dir_ls("data/dq_12_mos")[which(
   basename(fs::dir_ls("data/dq_12_mos")) %in% c(
     glue::glue("dq_12_mos_{format(perf_date, '%Y%m')}.txt.gz"),
@@ -814,7 +800,6 @@ ks_comparison <- ks_comparison |>
 
 ks_comparison
 
-# Decile bad rates
 # --- Decile bad-rate Wilson CI ---
 # Wilson intervals per decile INDEPENDENTLY. These describe each decile
 # alone, not the ten jointly. Comparing all nine adjacent pairs is nine
@@ -858,6 +843,10 @@ ks_change_table(ks_hist)
 ```
 
 ## Rank Ordering by Segment
+
+Compare current and development decile bad rates by segment. Each panel
+shows the rate curve and Wilson confidence band; monotonicity breaks are
+visible as inversions.
 
 ```{r rank_order_visuals}
 decile_hist <- load_metrics_history("KS_DECILES")
