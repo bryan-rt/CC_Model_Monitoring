@@ -6,34 +6,34 @@ Sourced R scripts. `pull_apps.R`, `function_cc_scorecard_data.R`,
 `ks_baseline.R`, `write_metrics_cache.R`, `report_visuals.R`, and
 `load_metrics_history.R` are called before the validated frontier (line 911;
 anchor: `# QC: Validated`). The remaining 8 scripts are commented out at
-`orchestration_2.Rmd:80` (PENDING TRANSCRIPTION marker).
+references removed (scripts not needed by current pipeline).
 
 | File | Status | Purpose | Key functions | Read by |
 |---|---|---|---|---|
 | `db.R` | FLATTENED | Shared `db_connect()` helper | `db_connect()` | Sourced by `pull_apps.R`, `function_cc_scorecard_data.R`, `setup_supabase.R` |
 | `setup_supabase.R` | CREATED | Idempotent table setup (DROP + CREATE + seed or generated) | `setup_supabase(mode)` | Manual setup |
 | `generate_cohort.R` | CREATED | Parameterized cohort generator (4 quarters, drift via tilt weights, D6/D16/D17). Generalized solver for categorical features. Features in Phase 2 with independent RNG. | `generate_cohort(quarters, feature_targets, seed)` | `R/setup_supabase.R` (mode="generated") |
-| `compute_si.R` | CREATED | Shared stability index kernel for PSI and CSI (D19). Computes percent_dev/current, K-L divergence, epsilon floor, Total rows, summary. Asserts sum(percent_dev)==1 per group. | `compute_stability_index(joined_df, epsilon)` | `orchestration_2.Rmd:273` (PSI chunk), `orchestration_2.Rmd:400` (CSI chunk, via prior source) |
-| `pull_features.R` | CREATED | Pull feature data (7 cols from `features` table, D17) | `get_features_data()` | `orchestration_2.Rmd:416` (anchor: `get_features_data` call in CSI cache-miss branch) |
-| `pull_apps.R` | FLATTENED | Pull application data (14 cols from flat `applications` table) | `get_apps_data()` | `orchestration_2.Rmd:139` (anchor: `get_apps_data` call in cache-miss branch) |
-| `function_cc_scorecard_data.R` | FLATTENED | Pull scorecard data (8 cols from flat `scorecard` table) | `get_cc_scorecard_data()` | `orchestration_2.Rmd:121` (anchor: `get_cc_scorecard_data` call in cache-miss branch) |
-| `build_dev_population.R` | CREATED | Generate development population reference (120 rows, frozen vigintile bins, D15) | `build_dev_population(output_path)` | `orchestration_2.Rmd:274` (anchor: `source` + `build_dev_population` call in PSI chunk) |
-| `feature_breaks.R` | CREATED | Frozen feature binning reference for CSI (D18). Literal list definition — 3 continuous (evenly-spaced breaks), 2 categorical (level sets + dev_counts). Global, not per-segment. All five total 10,000. | `feature_breaks` (list) | `orchestration_2.Rmd:402` (anchor: `source(here::here("R/feature_breaks.R"))` in CSI chunk) |
+| `compute_si.R` | CREATED | Shared stability index kernel for PSI and CSI (D19). Computes percent_dev/current, K-L divergence, epsilon floor, Total rows, summary. Asserts sum(percent_dev)==1 per group. | `compute_stability_index(joined_df, epsilon)` | `orchestration_2.Rmd:261` (PSI chunk), `orchestration_2.Rmd:395` (CSI chunk, via prior source) |
+| `pull_features.R` | CREATED | Pull feature data (7 cols from `features` table, D17) | `get_features_data()` | `orchestration_2.Rmd:411` (anchor: `get_features_data` call in CSI cache-miss branch) |
+| `pull_apps.R` | FLATTENED | Pull application data (14 cols from flat `applications` table) | `get_apps_data()` | `orchestration_2.Rmd:142` (anchor: `get_apps_data` call in cache-miss branch) |
+| `function_cc_scorecard_data.R` | FLATTENED | Pull scorecard data (8 cols from flat `scorecard` table) | `get_cc_scorecard_data()` | `orchestration_2.Rmd:124` (anchor: `get_cc_scorecard_data` call in cache-miss branch) |
+| `build_dev_population.R` | CREATED | Generate development population reference (120 rows, frozen vigintile bins, D15) | `build_dev_population(output_path)` | `orchestration_2.Rmd:262` (anchor: `source` + `build_dev_population` call in PSI chunk) |
+| `feature_breaks.R` | CREATED | Frozen feature binning reference for CSI (D18). Literal list definition — 3 continuous (evenly-spaced breaks), 2 categorical (level sets + dev_counts). Global, not per-segment. All five total 10,000. | `feature_breaks` (list) | `orchestration_2.Rmd:397` (anchor: `source(here::here("R/feature_breaks.R"))` in CSI chunk) |
 | `build_feature_breaks.R` | CREATED | Bootstrap + freeze-check for `feature_breaks.R` (D18). Generates file from feature_defs if absent; validates against feature_defs and Q4 2025 data if present. | `build_feature_breaks(seed)` | Manual validation |
-| `pull_performance.R` | CREATED | Pull performance data (3 cols from `performance` table, D20). Approved apps only, 12-month-lagged cohort. | `get_performance_data()` | `orchestration_2.Rmd:647` (anchor: `get_performance_data` call in KS cache-miss branch) |
-| `compute_ks.R` | CREATED | Shared KS computation helper (D20). Computes KS statistic and decile bad rates per segment. Deciles re-derived per cohort (not frozen). | `compute_ks_stats()` | `orchestration_2.Rmd:630` (anchor: `source` in KS chunk), `R/build_ks_baseline.R` |
+| `pull_performance.R` | CREATED | Pull performance data (3 cols from `performance` table, D20). Approved apps only, 12-month-lagged cohort. | `get_performance_data()` | `orchestration_2.Rmd:662` (anchor: `get_performance_data` call in KS cache-miss branch) |
+| `compute_ks.R` | CREATED | Shared KS computation helper (D20). Computes KS statistic and decile bad rates per segment. Deciles re-derived per cohort (not frozen). | `compute_ks_stats()` | `orchestration_2.Rmd:645` (anchor: `source` in KS chunk), `R/build_ks_baseline.R` |
 | `build_ks_baseline.R` | CREATED | Bootstrap + freeze KS baseline to `R/ks_baseline.R` (D20). Generates dev cohort, validates monotonicity, KS targets, min bads/decile. | `build_ks_baseline(seed)` | Manual validation |
-| `ks_baseline.R` | CREATED | Frozen development KS baseline (D20). Literal R source — diffable, greppable, committed. Generated by `build_ks_baseline.R`. | `ks_baseline` (list) | `orchestration_2.Rmd:631` (anchor: `source` in KS chunk) |
-| `wilson_ci.R` | CREATED | Vectorized Wilson score CI for binomial proportions (D21). Survives zero counts. | `wilson_ci(k, n, conf)` | `orchestration_2.Rmd:275` (anchor: `source` in PSI chunk) |
-| `bootstrap_ci.R` | CREATED | Stratified percentile bootstrap for PSI/CSI/KS (D21). Discovers group set from unresampled data. Own RNG stream (seed+3000L). | `bootstrap_ci(data, group_col, stat_fn, B, conf, seed)` | `orchestration_2.Rmd:276` (anchor: `source` in PSI chunk) |
-| `write_metrics_cache.R` | CREATED | Per-quarter summary CSV writer with schema validation and provenance (D22). Writes to `output_files/quarterly_stats/{PSI,CSI,KS}/`. | `write_metrics_cache(kpi, data, cohort_date, perf_date)` | `orchestration_2.Rmd:385` (anchor: `source` in PSI chunk, reused by CSI/KS) |
-| `load_metrics_history.R` | CREATED | Reads cached summary CSVs, validates schema consistency, warns on short windows and mixed code versions (D22). | `load_metrics_history(kpi, n_quarters, end_quarter)` | `orchestration_2.Rmd:395` (anchor: `source` in PSI visuals chunk, reused by CSI/KS/exec) |
-| `report_visuals.R` | CREATED | All visualization functions for quarterly report (D23). 8 functions: PSI trend table/chart, CSI heatmap/drilldowns, KS comparison/change table, rank ordering, executive summary. Uses flextable + ggplot2. | `psi_trend_table`, `psi_trend_chart`, `csi_heatmap`, `csi_drilldown_bars`, `ks_comparison_chart`, `ks_change_table`, `rank_order_chart`, `executive_summary_table` | `orchestration_2.Rmd:394` (anchor: `source` in PSI visuals chunk) |
-| `pull_trended_data.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` (PENDING TRANSCRIPTION marker) |
-| `pull_early_trended_data.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
-| `function_join_apps_perf.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
-| `pull_score_mapping.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
-| `calculate_early_ks.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
-| `calculate_true_bad_ks.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
-| `build_ks_report_tables.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
-| `build_ks_rank_order.R` | — | Not yet transcribed | — | Commented at `orchestration_2.Rmd:79` |
+| `ks_baseline.R` | CREATED | Frozen development KS baseline (D20). Literal R source — diffable, greppable, committed. Generated by `build_ks_baseline.R`. | `ks_baseline` (list) | `orchestration_2.Rmd:646` (anchor: `source` in KS chunk) |
+| `wilson_ci.R` | CREATED | Vectorized Wilson score CI for binomial proportions (D21). Survives zero counts. | `wilson_ci(k, n, conf)` | `orchestration_2.Rmd:263` (anchor: `source` in PSI chunk) |
+| `bootstrap_ci.R` | CREATED | Stratified percentile bootstrap for PSI/CSI/KS (D21). Discovers group set from unresampled data. Own RNG stream (seed+3000L). | `bootstrap_ci(data, group_col, stat_fn, B, conf, seed)` | `orchestration_2.Rmd:264` (anchor: `source` in PSI chunk) |
+| `write_metrics_cache.R` | CREATED | Per-quarter summary CSV writer with schema validation and provenance (D22). Writes to `output_files/quarterly_stats/{PSI,CSI,KS}/`. | `write_metrics_cache(kpi, data, cohort_date, perf_date)` | `orchestration_2.Rmd:371` (anchor: `source` in PSI chunk, reused by CSI/KS) |
+| `load_metrics_history.R` | CREATED | Reads cached summary CSVs, validates schema consistency, warns on short windows and mixed code versions (D22). | `load_metrics_history(kpi, n_quarters, end_quarter)` | `orchestration_2.Rmd:381` (anchor: `source` in PSI visuals chunk, reused by CSI/KS/exec) |
+| `report_visuals.R` | CREATED | All visualization functions for quarterly report (D23). 8 functions: PSI trend table/chart, CSI heatmap/drilldowns, KS comparison/change table, rank ordering, executive summary. Uses flextable + ggplot2. | `psi_trend_table`, `psi_trend_chart`, `csi_heatmap`, `csi_drilldown_bars`, `ks_comparison_chart`, `ks_change_table`, `rank_order_chart`, `executive_summary_table` | `orchestration_2.Rmd:380` (anchor: `source` in PSI visuals chunk) |
+| `pull_trended_data.R` | — | Not yet transcribed | — | Not needed by current pipeline |
+| `pull_early_trended_data.R` | — | Not yet transcribed | — | Not needed by current pipeline |
+| `function_join_apps_perf.R` | — | Not yet transcribed | — | Not needed by current pipeline |
+| `pull_score_mapping.R` | — | Not yet transcribed | — | Not needed by current pipeline |
+| `calculate_early_ks.R` | — | Not yet transcribed | — | Not needed by current pipeline |
+| `calculate_true_bad_ks.R` | — | Not yet transcribed | — | Not needed by current pipeline |
+| `build_ks_report_tables.R` | — | Not yet transcribed | — | Not needed by current pipeline |
+| `build_ks_rank_order.R` | — | Not yet transcribed | — | Not needed by current pipeline |

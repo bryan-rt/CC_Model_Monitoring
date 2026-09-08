@@ -6,7 +6,29 @@ Date: 2026-09-07
 
 Method: grepped the project for the variable, function, or assertion each
 comment references. All 17 confirmed VERIFIED — every referenced thing still
-exists in live code. Details in the Explore agent report.
+exists in live code.
+
+| # | Line(s) | Claim | Grep | Result |
+|---|---|---|---|---|
+| 1 | :65-71 | cohort_date is overridable, used downstream | `cohort_date` in Rmd | 24 hits across pull/read/cache/perf sections. VERIFIED. |
+| 2 | :278 | Full join produces 120-row frame | `psi_joined` in Rmd | Defined :279, asserted `nrow==120` at :289. VERIFIED. |
+| 3 | :291 | Epsilon floors zero bins (D14) | `epsilon` in R/compute_si.R | Used at :17, :27, :31 in compute_si.R; `psi_epsilon` set :292. VERIFIED. |
+| 4 | :294-299 | Dev pcts are all 5% | `dev_pcts` in Rmd | Defined :295-298, asserted :299. VERIFIED. |
+| 5 | :301 | compute_stability_index shared by PSI+CSI | `compute_stability_index` in Rmd | Called :302 (PSI) and :510 (CSI). VERIFIED. |
+| 6 | :437 | CSI inner_joins to psi_df | `psi_df` in CSI section | inner_join at :438-442. VERIFIED. |
+| 7 | :464 | Assert no NA bin index | `anyNA(bin_idx)` in Rmd | stopifnot at :465. VERIFIED. |
+| 8 | :485 | Dev ref: 6 segments x n_bins | `dev_ref` in Rmd | Built :486-496 from c("All Segments", 0:4). VERIFIED. |
+| 9 | :498 | Full join from dev side, coalesce 0 | `csi_joined` in Rmd | full_join :499-501. VERIFIED. |
+| 10 | :509 | Same SI helper as PSI | `compute_stability_index` at :510 | Called with csi_joined. VERIFIED. |
+| 11 | :526-527 | Bootstrap resamples rows once, all 5 features | `csi_boot_data` in Rmd | Defined :528; bootstrap_ci :531; stat_fn loops all features. VERIFIED. |
+| 12 | :590 | 10+8+5+4+3=30 bins, 180 total | `total_data_rows` + `180` in Rmd | Summed :591; asserted :603-604. VERIFIED. |
+| 13 | :628-635 | Candidate drivers, not decomposition | Read prose | CSI != PSI decomposition stated explicitly. VERIFIED. |
+| 14 | :648-655 | Two-cohort: PSI current, KS 12mo prior | Read prose | Explains lag, names both quarters. VERIFIED. |
+| 15 | :745-748 | KS deciles re-derived, not frozen | `compute_ks_stats` at :749 | Called on ks_df (live cohort); no frozen decile ref. VERIFIED. |
+| 16 | :751 | Monotonicity checks are warnings, not stops | `warning(` at :760-761 | Uses warning(), not stop(). VERIFIED. |
+| 17 | :819-822 | Wilson CI screening disclaimer | `wilson_ci` at :823 | Called with decile_rates. VERIFIED. |
+| 18 | :830-833 | Regression test: seg 0 decile 1 | `seg0_d1` in Rmd | Defined :831; two stopifnot :832-833. VERIFIED. |
+| 19 | :900-901 | Exec summary placement note | Read prose | "During docx assembly it moves to the front." VERIFIED. |
 
 ## Reclassification: :304-307 make.names() comment
 
@@ -33,6 +55,23 @@ rm(list = ls())
 ```
 
 Net: +3 lines.
+
+**rm() ordering:** The guard is in the setup chunk (:8-12). cohort_date is
+assigned at :65-72 in a LATER chunk (Loading Functions & Globals). Knit and
+"Run All Chunks" both execute chunks sequentially, so rm() fires before
+cohort_date is set. Order is correct.
+
+**Failure mode:** If the user sets cohort_date at the R console BEFORE clicking
+"Run All Chunks", rm(list = ls()) silently discards it and the in-file default
+(:68) takes over — a quiet wrong-quarter render. The override comment at :65-67
+already says "uncomment and set", meaning the override is intended to be
+edited in-file, not set at the console. Document this explicitly in the guard
+comment. Use `rm(list = ls())` (not setdiff) since the intent is a true clean
+slate and the in-file override is the contract.
+
+**YAML params note:** No params block exists today, so bare ls() is safe. If a
+params block is added later, knitr injects params before the setup chunk runs,
+and rm(list = ls()) would wipe it. This is a future concern, not a current one.
 
 ### E2. Delete OCR garbage + dead ks_methods (:74-76)
 
@@ -108,17 +147,16 @@ Replace with:
 
 Net: -3 lines.
 
-### E8. Fix line citation at :414
+### E8/E9. Convert all remaining line citations to relative references
 
-Change: `# Pull + cache (mirrors apps/scorecard pattern at :103-137)`
-To: `# Pull + cache (mirrors apps/scorecard pull pattern above)`
+Grepped `:\d{2,}` in the Rmd. Found 12 occurrences across 10 lines. Of these:
+- 10 are inside blocks being deleted (E6: :252-268, E7: :304-307)
+- 2 are live and need conversion:
+  - :414 `# Pull + cache (mirrors apps/scorecard pattern at :103-137)` → `above`
+  - :665 `# Pull + cache performance data (3 months, mirrors apps pattern at :104)` → `above`
 
-Net: 0 lines.
-
-### E9. Fix line citation at :665
-
-Change: `# Pull + cache performance data (3 months, mirrors apps pattern at :104)`
-To: `# Pull + cache performance data (3 months, mirrors apps pull pattern above)`
+**Total converted to relative references: 2.** Remaining 10 eliminated by
+deletion. After this pass, zero in-file line citations remain.
 
 Net: 0 lines.
 

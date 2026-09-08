@@ -5,14 +5,14 @@ get_cc_scorecard_data <- function(performance_window, write = TRUE) {
   on.exit(DBI::dbDisconnect(conn))
 
   # -- Type contract (Postgres DDL source) ---------------------------------
-  # sq_num         INTEGER      NOT NULL   retained per D9, not grain-defining
+  # sq_num         INTEGER      NOT NULL
   # user_ref_num   VARCHAR(14)  NOT NULL   join key -> apps
   # score          NUMERIC      NULL
   # segment        TEXT         NULL       Rmd: as.character(as.numeric(segment))
   # actduty        TEXT         NULL
   # trans_date_ct  DATE         NOT NULL   date filter column
   # proc_date_ct   DATE         NULL
-  # primemdt       TEXT         NULL       D10: name resolved, type deliberately TEXT
+  # primemdt       TEXT         NULL
 
   df <- DBI::dbGetQuery(conn, glue::glue("
     SELECT

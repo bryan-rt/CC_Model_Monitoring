@@ -1,7 +1,7 @@
 # compute_ks.R
 #
 # Shared KS computation helper used by both the Rmd KS chunk and
-# R/build_ks_baseline.R. Single KS definition in the codebase (D20).
+# R/build_ks_baseline.R. Single KS definition in the codebase.
 #
 # Input: data frame with score, binary outcome (0/1), segment columns.
 # Returns list:
@@ -30,7 +30,7 @@ compute_ks_stats <- function(df,
   )
 
   # --- Per-segment KS ---
-  # Convention: decile 1 = highest score = LOWEST risk (D20). Rows are sorted
+  # Convention: decile 1 = highest score = LOWEST risk. Rows are sorted
   # desc(score), then ntile() assigns group 1 to the first (highest-scoring)
   # rows. Bad rates increase with decile number.
   #
