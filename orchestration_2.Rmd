@@ -94,13 +94,17 @@ fs::dir_create(c('output_files', 'output_files/quarterly_stats',
 
 # Quarterly Report
 
-This section processes scorecard and application data, calculates PSI, CSI, KS, bad rate, and approval rate metrics, and prepares summary tables.
+This report monitors a deployed application scorecard. It answers two questions:
 
-PSI and CSI evaluate the most recent window of through the door (TTD) applications. This window is considered the model input.
+**Has the population changed?** PSI and CSI compare the current quarter's through-the-door applications to the development population. These use only inputs and scores — no outcome labels required — so they are available as soon as applications arrive.
+
+**Does the model still work?** KS and rank-ordering compare predicted risk to realized outcomes. Because outcomes require a 12-month performance window, these metrics necessarily lag by one year.
+
+The report therefore draws on two cohorts: PSI and CSI use the current quarter's applications; KS and rank-ordering use bookings from twelve months prior whose outcome window has closed. The label-free half is the early warning system: if the population shifts today, PSI sees it today. KS cannot confirm a performance impact for another year. That lag is why both halves exist.
 
 ## PSI
 
-PSI and CSI evaluate the current quarter's through-the-door applications — the model's input distribution. Performance metrics (KS, DQ90) use a different cohort; see the KS section for the two-cohort rationale.
+Population Stability Index measures how far the current score distribution has moved from the development population. Scores are binned into frozen development vigintiles — the reference is uniform by construction (5% per bin), so any departure is drift. Thresholds: below 0.10 is stable (note in review), 0.10 to 0.25 is watch (flag and compare to prior quarters), above 0.25 is investigate (notify model owner, assess refit). Segment-level and portfolio-level PSI can disagree; that disagreement is the reason for segment-level monitoring.
 
 Pull the current quarter's scorecard and application data from Supabase (or read from local cache if already present) and write gzipped CSVs to `data/`.
 
@@ -600,6 +604,8 @@ write_metrics_cache("CSI", csi_cache, cohort_date)
 
 ## Candidate Drivers of Score Distribution Shift
 
+Characteristic Stability Index applies the same divergence calculation to each model input rather than the score. When PSI flags a segment, CSI indicates which inputs also shifted. The bins are frozen development breaks, analogous to PSI's vigintiles. CSI uses the same thresholds as PSI by convention. Note that CSI magnitude is sensitive to bin count — a coarsely binned feature reads lower than a finely binned one for the same underlying shift — so cross-feature comparisons are indicative rather than strict.
+
 The score distribution shifted (PSI above), and among model inputs the features below also shifted materially while others held. These are candidate drivers, not a decomposition: CSI and PSI are independent calculations on different variables. Attributing a specific share of the PSI shift to a given feature would require the scorecard weights and a sensitivity analysis, which is outside the scope of this quarterly review.
 
 ```{r csi_visuals}
@@ -615,7 +621,11 @@ for (nm in names(drilldowns)) {
 
 ## KS and DQ90 Rank Ordering
 
-Performance-based metrics use a DIFFERENT cohort than PSI/CSI. PSI/CSI evaluate Q3 2026 through-the-door applications (current quarter input distribution). KS and DQ90 rank ordering evaluate Q3 2025 BOOKED applications whose 12-month outcome window has now closed. The lag is inherent to outcome monitoring: performance evidence is always 12 months behind the input distribution that PSI measures.
+Performance-based metrics use a different cohort than PSI and CSI. PSI and CSI evaluate the current quarter's through-the-door applications. KS and rank-ordering evaluate bookings from twelve months prior whose outcome window has closed. The lag is inherent: performance evidence is always one year behind the input distribution that PSI measures.
+
+KS (Kolmogorov-Smirnov) measures discrimination — how well the score separates accounts that went bad from those that did not. Rank-ordering asks whether bad rates decline monotonically across score deciles: whether the score is still ordered correctly. They are complementary: KS can hold while monotonicity breaks in the middle deciles, meaning overall separation looks acceptable while the score is inverted over part of its range.
+
+Unlike PSI's frozen vigintile bins, KS deciles are re-derived from the booked cohort. The distinction is intentional: PSI asks whether the population moved relative to development; KS asks whether the score still separates within this population.
 
 ```{r}
 # --- KS and DQ90 Rank Ordering ---
@@ -646,7 +656,7 @@ perf <- purrr::map_dfr(seq_len(number_of_month_window), function(i) {
 })
 names(perf) <- tolower(names(perf))
 
-# Pull Q3 2025 apps + scorecard for score and segment
+# Pull performance-quarter apps + scorecard for score and segment
 perf_apps_paths <- fs::dir_ls("data/apps")[which(
   basename(fs::dir_ls("data/apps")) %in% c(
     glue::glue("apps_{format(perf_date, '%Y%m')}.txt.gz"),

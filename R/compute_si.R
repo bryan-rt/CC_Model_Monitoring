@@ -23,16 +23,10 @@ compute_stability_index <- function(joined_df, epsilon = 0.0001) {
       segment_total   = sum(counts),
       percent_dev     = counts_dev / sum(counts_dev),
 
-      # QUESTION: Why not have these two if_else statements as a singular case statement so the variable is defined once?
-      percent_current = dplyr::if_else(
-        segment_total == 0,
-        epsilon,
-        counts / segment_total
-      ),
-      percent_current = dplyr::if_else(
-        percent_current == 0,
-        epsilon,
-        percent_current
+      percent_current = dplyr::case_when(
+        segment_total == 0          ~ epsilon,  # segment absent entirely
+        counts / segment_total == 0 ~ epsilon,  # bin empty within a populated segment
+        TRUE                        ~ counts / segment_total
       ),
       epsilon_floored = (counts == 0 & segment_total > 0),
       epsilon_only    = segment_total == 0
@@ -54,7 +48,9 @@ compute_stability_index <- function(joined_df, epsilon = 0.0001) {
       `Population Divergence (K-L)` = `Difference (B-A)` * `Log of Proportion (B/A)`
     )
 
-  # QUESTION: What would cause these NaN or Inf occurances?
+  # Should be unreachable — the epsilon floor blocks NaN/-Inf and the dev
+  # reference is uniform by construction. This is a tripwire: if it fires,
+  # the epsilon floor or the dev population file has broken.
   stopifnot("Inf or NaN in Population Divergence (K-L)" =
               all(is.finite(si_data$`Population Divergence (K-L)`)))
 

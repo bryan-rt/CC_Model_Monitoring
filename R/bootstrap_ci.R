@@ -7,7 +7,12 @@
 # stat_fn(resampled_df) must return a data.frame with columns
 # `group` (character) and `value` (numeric). One row per group.
 
-# QUESTION: Do I call this the 95% percentile confidence window because conf = 0.95? When and why would we change the value?
+# conf sets the interval width. 95% is convention. Raise to 0.99 when a false
+# escalation is expensive (wider interval, fewer flags, more confidence in
+# each). Lower to 0.90 for an early-warning screen where a missed shift costs
+# more than a second look. The level is a policy dial on how much ambiguity is
+# tolerated before escalating — it directly changes which segments come back
+# tier_certain = FALSE.
 
 bootstrap_ci <- function(data, group_col, stat_fn,
                          B = 500, conf = 0.95, seed = 20260907) {

@@ -4,15 +4,15 @@ Quarterly monitoring pipeline for a custom credit card application scorecard.
 Rebuilds production pipeline (DB2/Databricks) from OCR screenshots, rewired to
 Supabase (Postgres) with generic tables.
 
-Primary orchestrator: `orchestration_2.Rmd` (896 lines, 15 chunks).
-Validated frontier: line 896 (EOF) — VALIDATED: has run
+Primary orchestrator: `orchestration_2.Rmd` (875 lines, 15 chunks).
+Validated frontier: line 875 (EOF) — VALIDATED: has run
 against live Supabase (D5). psi_df: 30,500 rows (generated cohort), segments
 0-4. PSI + CSI + KS + confidence intervals run clean through :835.
 CI bootstrap chunks add ~2 minutes to a full run (PSI 28s, CSI 63s, KS 29s).
 Visual chunks (D23) added after each KPI section: PSI trend table/chart,
 CSI heatmap + conditional drilldowns, KS comparison + rank ordering,
 executive summary. All visuals source data via load_metrics_history().
-  (anchor: :896 = EOF)
+  (anchor: :875 = EOF)
 
 cohort_date (orchestration_2.Rmd:69-75): overridable parameter, defaults to
 current quarter. Override must be edited IN-FILE (not at the console — the
@@ -35,35 +35,35 @@ Completed: OCR cleanup, `supabase-credentials` (2bbfe03), `flatten-apps-query`,
 `polish-orchestration-rmd`.
 Next sequence: cache-manifest -> round-trip test -> fix-orchestration-rmd.
 
-CSI (orchestration_2.Rmd:395-612) is fully built: pulls features, joins to PSI
+CSI (orchestration_2.Rmd:386-602) is fully built: pulls features, joins to PSI
 population, computes CSI per feature x segment using the shared
 `compute_stability_index()` helper in `R/compute_si.R` (D19). PSI chunk
 refactored to use the same helper. Outputs `csi_quarterly.xlsx` (6 tabs: one
 per feature + ci tab) and `csi_summary` (6 segments x 5 features).
-  (anchor: :395 = CSI chunk opening fence `\`\`\`{r}`)
-  (anchor: :261 = `source(here::here("R/compute_si.R"))` in PSI chunk)
+  (anchor: :386 = CSI chunk opening fence `\`\`\`{r}`)
+  (anchor: :252 = `source(here::here("R/compute_si.R"))` in PSI chunk)
 
-KS (orchestration_2.Rmd:643-835) is fully built: pulls 12-month-lagged
-performance cohort (Q3 2025), joins to apps+scorecard for score and segment,
+KS (orchestration_2.Rmd:630-822) is fully built: pulls 12-month-lagged
+performance cohort, joins to apps+scorecard for score and segment,
 computes KS and decile bad rates via `compute_ks_stats()` in `R/compute_ks.R`
 (D20). Compares to frozen dev baseline in `R/ks_baseline.R`. Outputs
 `ks_quarterly.xlsx` (2 tabs: ks_comparison, decile_rates).
-  (anchor: :643 = KS chunk opening fence `\`\`\`{r}`)
-  (anchor: :645 = `source(here::here("R/compute_ks.R"))` in KS chunk)
+  (anchor: :630 = KS chunk opening fence `\`\`\`{r}`)
+  (anchor: :632 = `source(here::here("R/compute_ks.R"))` in KS chunk)
 
 Confidence intervals (D21): PSI, CSI, KS use stratified percentile bootstrap
 (B=500, `R/bootstrap_ci.R`). Decile bad rates use Wilson score intervals
 (`R/wilson_ci.R`). PSI carries tier (stable/watch/investigate) and
 tier_certain (FALSE when CI spans a threshold).
-  (anchor: :309 = PSI bootstrap)
-  (anchor: :517 = CSI bootstrap)
-  (anchor: :764 = KS bootstrap)
-  (anchor: :808 = Wilson CI for decile bad rates)
+  (anchor: :303 = PSI bootstrap)
+  (anchor: :508 = CSI bootstrap)
+  (anchor: :751 = KS bootstrap)
+  (anchor: :795 = Wilson CI for decile bad rates)
 
 Metrics cache (D22): Per-quarter summary CSVs in
 `output_files/quarterly_stats/{PSI,CSI,KS}/`. Named by REPORT quarter (YYYYQn),
 with `data_cohort` column recording the actual data period. KS data_cohort is
-12 months prior (perf_date at :649). `R/write_metrics_cache.R` writes,
+12 months prior (perf_date at :636). `R/write_metrics_cache.R` writes,
 `R/load_metrics_history.R` reads. Schema-validated on both write and read.
 Provenance: report_quarter, data_cohort, code_version, run_timestamp.
 
@@ -74,11 +74,11 @@ comparison chart + change table, rank-ordering chart (faceted, free y), and
 executive summary table. CSI section labeled "Candidate drivers" — CSI does
 not decompose PSI (D23). Executive summary at end of Rmd; moves to front
 during docx assembly.
-  (anchor: :380 = PSI visuals chunk)
-  (anchor: :623 = CSI visuals chunk)
-  (anchor: :839 = KS visuals chunk)
-  (anchor: :851 = Rank ordering chunk)
-  (anchor: :892 = Executive summary chunk)
+  (anchor: :374 = PSI visuals chunk)
+  (anchor: :611 = CSI visuals chunk)
+  (anchor: :826 = KS visuals chunk)
+  (anchor: :836 = Rank ordering chunk)
+  (anchor: :871 = Executive summary chunk)
 
 ## Pull function contracts
 
