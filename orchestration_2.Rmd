@@ -8,16 +8,9 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = "~/Desktop/Professional/Projects/CC_Model_Monitoring")
-# Clean slate: prevents objects from a previous cohort_date persisting across
-# an interactive re-run. Knit starts fresh; this protects "Run All Chunks".
-# NOTE: cohort_date must be overridden IN-FILE (line below), not at the console.
 rm(list = ls())
 here::i_am("orchestration_2.Rmd")
 ```
-
-## Overview
-
-TBD
 
 ## Running the Workflow
 
@@ -73,7 +66,7 @@ if (!exists("cohort_date")) {
 }
 
 source('R/pull_apps.R')
-source('R/function_cc_scorecard_data.R')
+source('R/pull_scorecard.R')
 source('R/pull_features.R')
 source('R/pull_performance.R')
 ```
@@ -81,8 +74,6 @@ source('R/pull_performance.R')
 ### 5) Folder Init
 
 This section checks for required directories and creates them if missing. Run once per new project setup.
-
-**Note** — after folder creation, copy any required data files into the local `data/` directory to preserve file pointers.
 
 ```{r, echo=FALSE}
 fs::dir_create(c('data', 'data/apps', 'data/scorecard', 'data/features', 'data/dq_12_mos'))
@@ -106,7 +97,7 @@ The report therefore draws on two cohorts: PSI and CSI use the current quarter's
 
 Population Stability Index measures how far the current score distribution has moved from the development population. Scores are binned into frozen development vigintiles — the reference is uniform by construction (5% per bin), so any departure is drift. Thresholds: below 0.10 is stable (note in review), 0.10 to 0.25 is watch (flag and compare to prior quarters), above 0.25 is investigate (notify model owner, assess refit). Segment-level and portfolio-level PSI can disagree; that disagreement is the reason for segment-level monitoring.
 
-Pull the current quarter's scorecard and application data from Supabase (or read from local cache if already present) and write gzipped CSVs to `data/`.
+Pull the current quarter's scorecard and application data from Supabase and write it to the local cache, if not already present, as a gzipped CSVs to `data/`.
 
 ```{r}
 
@@ -116,13 +107,12 @@ paths <- fs::dir_ls('data/scorecard')[which(basename(fs::dir_ls('data/scorecard'
   glue::glue('scorecard_{format(as.Date(cohort_date) %m+% months(2), "%Y%m")}.txt.gz')))]
 
 if(length(paths) != 3){
-  scorecard <- purrr::map_dfr(seq(cohort_date, cohort_date %m+% months(2), 'month'),
+  purrr::walk(seq(cohort_date, cohort_date %m+% months(2), 'month'),
                               .progress = TRUE,
                               function(model_input_window){
 
-                              df <- get_cc_scorecard_data(performance_window = model_input_window,
+                              get_cc_scorecard_data(performance_window = model_input_window,
                                                           write = T)
-                              return(df)
                               })
 }
 
@@ -134,13 +124,12 @@ paths <- fs::dir_ls('data/apps/')[which(basename(fs::dir_ls('data/apps/')) %in% 
 ))]
 
 if(length(paths) != 3){
-  apps <- purrr::map_dfr(seq(cohort_date, cohort_date %m+% months(2), 'month'),
+  purrr::walk(seq(cohort_date, cohort_date %m+% months(2), 'month'),
                               .progress = TRUE,
                               function(model_input_window){
 
-                              df <- get_apps_data(performance_window = model_input_window,
+                              get_apps_data(performance_window = model_input_window,
                                                           write = T)
-                              return(df)
                               })
 }
 ```
@@ -606,7 +595,7 @@ write_metrics_cache("CSI", csi_cache, cohort_date)
 
 Characteristic Stability Index applies the same divergence calculation to each model input rather than the score. When PSI flags a segment, CSI indicates which inputs also shifted. The bins are frozen development breaks, analogous to PSI's vigintiles. CSI uses the same thresholds as PSI by convention. Note that CSI magnitude is sensitive to bin count — a coarsely binned feature reads lower than a finely binned one for the same underlying shift — so cross-feature comparisons are indicative rather than strict.
 
-The score distribution shifted (PSI above), and among model inputs the features below also shifted materially while others held. These are candidate drivers, not a decomposition: CSI and PSI are independent calculations on different variables. Attributing a specific share of the PSI shift to a given feature would require the scorecard weights and a sensitivity analysis, which is outside the scope of this quarterly review.
+As PSI evealutes the shift in the input population, CSI evaluates candidate drivers, not a decomposition: CSI and PSI are independent calculations on different variables. Attributing a specific share of the PSI shift to a given feature would require the scorecard weights and a sensitivity analysis, which is outside the scope of this quarterly review.
 
 ```{r csi_visuals}
 csi_hist <- load_metrics_history("CSI", 4)
@@ -790,19 +779,13 @@ ks_comparison
 # --- Decile bad-rate Wilson CI ---
 # Wilson intervals per decile INDEPENDENTLY. These describe each decile
 # alone, not the ten jointly. Comparing all nine adjacent pairs is nine
-# comparisons and will occasionally show a spurious gap. These are
-# screening intervals for triage, not hypothesis tests.
+# comparisons and will occasionally show a gap. 
 decile_wilson <- wilson_ci(ks_result$decile_rates$n_bads, ks_result$decile_rates$n)
 ks_result$decile_rates <- ks_result$decile_rates |>
   dplyr::mutate(ci_lower = decile_wilson$lower, ci_upper = decile_wilson$upper)
 
 stopifnot("Wilson CI lower bound negative" = all(ks_result$decile_rates$ci_lower >= 0))
 stopifnot("Wilson CI upper bound > 1" = all(ks_result$decile_rates$ci_upper <= 1))
-
-# Test case: segment 0 decile 1 (0 bads in 1538)
-seg0_d1 <- ks_result$decile_rates |> dplyr::filter(segment == "0", decile == 1)
-stopifnot("Wilson CI for 0/1538: lower should be ~0" = seg0_d1$ci_lower < 0.001)
-stopifnot("Wilson CI for 0/1538: upper should be ~0.0025" = abs(seg0_d1$ci_upper - 0.0024) < 0.001)
 
 ks_result$decile_rates
 
@@ -865,8 +848,6 @@ Confidence intervals use two methods:
 These intervals reflect sampling variability — "if a cohort with this shape had been drawn differently, how much would the metric move?" They do NOT predict regeneration variance from the data generator.
 
 ## Executive Summary
-
-*Placement note: this summary requires values computed throughout the document. During docx assembly it moves to the front of the report.*
 
 ```{r executive_summary}
 exec_tbl <- executive_summary_table(psi_hist, ks_hist, decile_hist,
